@@ -59,7 +59,7 @@ type Client struct {
 	HTTP         *http.Client
 	NameOverride string
 	// Retry overrides the retry and size limits; zero fields keep the defaults.
-	// The paid request still retries only a 429.
+	// The paid request is still never retried.
 	Retry httpx.Policy
 }
 
@@ -117,7 +117,7 @@ func (c *Client) httpc(p netguard.Policy) *http.Client {
 
 func (c *Client) apiPolicy() httpx.Policy { return c.merge(httpx.DefaultPolicy()) }
 
-// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+// paidPolicy is apiPolicy for a request that can bill: it is never retried.
 func (c *Client) paidPolicy() httpx.Policy {
 	p := c.apiPolicy()
 	p.Paid = true
@@ -209,8 +209,7 @@ func (c *Client) post(ctx context.Context, hc *http.Client, pol netguard.Policy,
 	if u, perr := url.Parse(target); perr != nil || !pol.MayAuth(u) {
 		return nil, errNoAuth
 	}
-	paid := c.paidPolicy()
-	status, body, err := httpx.Send(hc, func() (*http.Request, error) {
+	status, body, hint, err := httpx.SendHint(hc, func() (*http.Request, error) {
 		r, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(buf))
 		if err != nil {
 			return nil, err
@@ -218,12 +217,12 @@ func (c *Client) post(ctx context.Context, hc *http.Client, pol netguard.Policy,
 		r.Header.Set("Api-Key", c.APIKey)
 		r.Header.Set("Content-Type", ctype)
 		return r, nil
-	}, paid)
+	}, c.paidPolicy())
 	if err != nil {
 		return nil, fmt.Errorf("ideogram: request: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), paid.Hint(status))
+		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), hint)
 	}
 	return body, nil
 }

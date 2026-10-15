@@ -109,7 +109,10 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 		serr := statusError(resp.StatusCode, body)
 		// Checked first: "stream timeout" (408) or a 429 about streaming
 		// requests is not a refusal to stream.
-		if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return nil, false, fmt.Errorf("%w. %s", serr, httpx.RateHint(resp.Header.Get("Retry-After")))
+		}
+		if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= 500 {
 			return nil, false, fmt.Errorf("%w. %s", serr, retryHint)
 		}
 		if resp.StatusCode >= 400 && refusesStream(serr) {

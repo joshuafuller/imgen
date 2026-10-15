@@ -220,36 +220,48 @@ func fastPaid() Policy {
 	return p
 }
 
-// A paid request is retried only after a 429, which the provider refused
-// without billing. After any other failure the provider may have billed it:
-// Send returns at once, and a network error ends with the hint.
-func TestPaidRetriesOnly429(t *testing.T) {
+// rateLimited answers 429 with the Retry-After header ra.
+func rateLimited(ra string) step {
+	return func(_ *testing.T, w http.ResponseWriter) {
+		w.Header().Set("Retry-After", ra)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("slow down"))
+	}
+}
+
+// A paid request is never sent twice: the provider controls every status
+// and byte it returns, so none of them proves that it did not run and bill
+// the request. SendHint returns the first answer, with the hint for its
+// status; a network error ends with PaidHint.
+func TestPaidNeverRetried(t *testing.T) {
 	isURLErr := func(err error) bool { var u *url.Error; return errors.As(err, &u) }
 	cases := []struct {
 		name   string
 		steps  []step
-		calls  int32
 		status int
 		body   string
-		cause  func(error) bool // nil: Send returns no error
+		hint   string
+		cause  func(error) bool // nil: SendHint returns no error
 	}{
-		{"reset", []step{resetConn, ok}, 1, 0, "", isURLErr},
-		{"body cut off", []step{cutBody, ok}, 1, 0, "", func(err error) bool { return errors.Is(err, io.ErrUnexpectedEOF) }},
-		{"408", []step{code(408), ok}, 1, 408, "busy", nil},
-		{"500", []step{code(500), ok}, 1, 500, "busy", nil},
-		{"502", []step{code(502), ok}, 1, 502, "busy", nil},
-		{"503", []step{code(503), ok}, 1, 503, "busy", nil},
-		{"504", []step{code(504), ok}, 1, 504, "busy", nil},
-		{"429 then 200", []step{code(429), ok}, 2, 200, "ok", nil},
-		{"429 three times", []step{code(429)}, 3, 429, "busy", nil},
-		{"429 then reset", []step{code(429), resetConn, ok}, 2, 0, "", isURLErr},
+		{"reset", []step{resetConn, ok}, 0, "", "", isURLErr},
+		{"body cut off", []step{cutBody, ok}, 0, "", "", func(err error) bool { return errors.Is(err, io.ErrUnexpectedEOF) }},
+		{"408", []step{code(408), ok}, 408, "busy", ". " + PaidHint, nil},
+		{"500", []step{code(500), ok}, 500, "busy", ". " + PaidHint, nil},
+		{"502", []step{code(502), ok}, 502, "busy", ". " + PaidHint, nil},
+		{"503", []step{code(503), ok}, 503, "busy", ". " + PaidHint, nil},
+		{"504", []step{code(504), ok}, 504, "busy", ". " + PaidHint, nil},
+		{"429 then 200", []step{code(429), ok}, 429, "busy", ". " + RateHint(""), nil},
+		{"429 three times", []step{code(429)}, 429, "busy", ". " + RateHint(""), nil},
+		{"429 then reset", []step{code(429), resetConn, ok}, 429, "busy", ". " + RateHint(""), nil},
+		{"429 with Retry-After", []step{rateLimited("20"), ok}, 429, "slow down", ". " + RateHint("20"), nil},
+		{"400", []step{code(400), ok}, 400, "busy", "", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			srv, calls := script(t, tc.steps...)
-			status, body, err := Send(srv.Client(), newReq(t, srv.URL), fastPaid())
-			if calls.Load() != tc.calls || status != tc.status || string(body) != tc.body {
-				t.Fatalf("calls %d status %d body %q, want %d %d %q (err %v)", calls.Load(), status, body, tc.calls, tc.status, tc.body, err)
+			status, body, hint, err := SendHint(srv.Client(), newReq(t, srv.URL), fastPaid())
+			if calls.Load() != 1 || status != tc.status || string(body) != tc.body || hint != tc.hint {
+				t.Fatalf("calls %d status %d body %q hint %q, want 1 %d %q %q (err %v)", calls.Load(), status, body, hint, tc.status, tc.body, tc.hint, err)
 			}
 			switch {
 			case tc.cause == nil && err != nil:
@@ -291,31 +303,72 @@ func TestFreeRetriesNetworkError(t *testing.T) {
 	}
 }
 
+// IMGEN_RETRIES gives a paid request no retries: one 429 is the answer.
 func TestPaidPolicy(t *testing.T) {
 	t.Setenv("IMGEN_RETRIES", "5")
-	if p := PaidPolicy(); !p.Paid || p.Attempts != 5 || p.Base != time.Second || p.MaxBytes != 16<<20 {
+	if p := PaidPolicy(); !p.Paid || p.MaxBytes != 16<<20 {
 		t.Fatalf("PaidPolicy %+v", p)
 	}
 	if DefaultPolicy().Paid || ImagePolicy().Paid {
 		t.Fatal("DefaultPolicy and ImagePolicy are for free requests")
 	}
+	srv, calls := script(t, code(429), ok)
+	status, _, hint, err := SendHint(srv.Client(), newReq(t, srv.URL), PaidPolicy())
+	if err != nil || status != 429 || hint != ". "+RateHint("") || calls.Load() != 1 {
+		t.Fatalf("status %d hint %q err %v calls %d", status, hint, err, calls.Load())
+	}
 }
 
-// Hint ends a paid request's status error after a status that Send did not
-// retry because the provider may have run and billed the request.
+// The hint ends a paid request's status error: after a 408 or a 5xx the
+// provider may have billed it, and a 429 is not retried either. A free
+// request has none.
 func TestHint(t *testing.T) {
 	paid, free := PaidPolicy(), DefaultPolicy()
 	for _, s := range []int{408, 500, 502, 503, 504, 524} {
-		if got := paid.Hint(s); got != ". "+PaidHint {
-			t.Errorf("paid Hint(%d) = %q", s, got)
-		}
-		if got := free.Hint(s); got != "" {
-			t.Errorf("free Hint(%d) = %q", s, got)
+		if got := paid.hint(s, "20"); got != ". "+PaidHint {
+			t.Errorf("paid hint(%d) = %q", s, got)
 		}
 	}
-	for _, s := range []int{200, 400, 401, 404, 429} {
-		if got := paid.Hint(s); got != "" {
-			t.Errorf("paid Hint(%d) = %q", s, got)
+	if got := paid.hint(429, "20"); got != ". "+RateHint("20") {
+		t.Errorf("paid hint(429) = %q", got)
+	}
+	for _, s := range []int{200, 400, 401, 404} {
+		if got := paid.hint(s, "20"); got != "" {
+			t.Errorf("paid hint(%d) = %q", s, got)
 		}
+	}
+	for _, s := range []int{200, 400, 408, 429, 500, 503} {
+		if got := free.hint(s, "20"); got != "" {
+			t.Errorf("free hint(%d) = %q", s, got)
+		}
+	}
+}
+
+// RateHint passes on a Retry-After in seconds, so the user knows when to run
+// the request again. Any other value is a plain "later".
+func TestRateHint(t *testing.T) {
+	const base = "Rate limited: not retried automatically, because a paid request is never sent twice; run it again "
+	for ra, want := range map[string]string{
+		"20":                            "in 20s",
+		"1":                             "in 1s",
+		"":                              "later",
+		"0":                             "later",
+		"-5":                            "later",
+		"soon":                          "later",
+		"Wed, 21 Oct 2015 07:28:00 GMT": "later",
+		"99999999999999999999":          "later",
+	} {
+		if got := RateHint(ra); got != base+want {
+			t.Errorf("RateHint(%q) = %q, want %q", ra, got, base+want)
+		}
+	}
+}
+
+// Send is SendHint without the hint.
+func TestSendDropsHint(t *testing.T) {
+	srv, calls := script(t, rateLimited("3"), ok)
+	status, body, err := Send(srv.Client(), newReq(t, srv.URL), fastPaid())
+	if err != nil || status != 429 || string(body) != "slow down" || calls.Load() != 1 {
+		t.Fatalf("status %d body %q err %v calls %d", status, body, err, calls.Load())
 	}
 }

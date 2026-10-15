@@ -263,10 +263,13 @@ func okBody() string {
 	return `{"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}`
 }
 
-func TestGenerateRetries429ThenOK(t *testing.T) {
+// A generateContent call can bill, so a 429 is the answer: no second
+// request. The error says when to run it again.
+func TestGenerate429NotRetried(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if calls.Add(1) < 2 {
+			w.Header().Set("Retry-After", "20")
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
@@ -275,8 +278,9 @@ func TestGenerateRetries429ThenOK(t *testing.T) {
 	defer srv.Close()
 	c := New("k")
 	c.BaseURL, c.HTTP, c.Retry = srv.URL, srv.Client(), fastRetry()
-	if _, err := c.Generate(context.Background(), provider.Request{Model: "m", Prompt: "p"}); err != nil || calls.Load() != 2 {
-		t.Fatalf("err %v calls %d", err, calls.Load())
+	_, err := c.Generate(context.Background(), provider.Request{Model: "m", Prompt: "p"})
+	if calls.Load() != 1 || !errors.Is(err, errHTTPStatus) || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("20")) {
+		t.Fatalf("err %v calls %d, want 1 call and the 429 error with the rate hint", err, calls.Load())
 	}
 }
 

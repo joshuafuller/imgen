@@ -405,7 +405,7 @@ On an error, stdout gets `{"ok":false,"error":"...","exit":1}` (plus `line` in `
 | `GEMINI_BASE_URL`, `OPENAI_BASE_URL` | Endpoint override for the built-in `gemini` and `openai` instances, when the rules file sets no `base_url`. With `OPENAI_BASE_URL` set, the built-in `openai` instance sends `OPENAI_API_KEY` there if it is set; see [Providers](providers.md#openai). |
 | `IMGEN_ENV_FILE` | Key file. Default `~/.config/imgen/env`. Must not be readable by group or others. |
 | `IMGEN_RULES` | Rules file. Default `~/.config/imgen/rules.json`. |
-| `IMGEN_RETRIES` | Attempts for HTTP 429, 5xx and network errors. Default `3`, with backoff. A request that can bill is retried only after a 429; streamed OpenAI calls are not retried. |
+| `IMGEN_RETRIES` | Attempts for downloads, status polls and model lists after HTTP 429, 5xx and network errors. Default `3`, with backoff. A request that can bill is never retried, not even after a 429: the error says when to run it again. |
 | `IMGEN_PRICES` | JSON file that overrides the built-in price table. |
 | `IMGEN_BUDGET` | Spending limit in USD per local day. See [Configuration](configuration.md#daily-budget). |
 | `IMGEN_HISTORY` | `off` stops recording the history. |

@@ -51,7 +51,7 @@ var (
 // retry is the HTTP retry policy; tests shrink it.
 var retry = httpx.DefaultPolicy()
 
-// paid is retry with Paid set: a call that bills is retried only after a 429.
+// paid is retry with Paid set: a call that bills is never retried.
 func paid() httpx.Policy {
 	p := retry
 	p.Paid = true
@@ -103,7 +103,7 @@ func newBackend(base, defHost, keyHeader, key string) *backend {
 }
 
 // call sends one JSON request under the retry policy rp and decodes a 2xx body
-// into out. For a paid rp, a 408 or 5xx error ends with the hint.
+// into out. For a paid rp, a 408, 429 or 5xx error ends with the hint.
 func call(ctx context.Context, b *backend, method, rawURL string, body []byte, rp httpx.Policy, out any) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -115,7 +115,7 @@ func call(ctx context.Context, b *backend, method, rawURL string, body []byte, r
 	if !b.pol.MayAuth(u) {
 		return fmt.Errorf("%w: %s", errHost, u.Hostname())
 	}
-	status, rb, err := httpx.Send(b.client, func() (*http.Request, error) {
+	status, rb, hint, err := httpx.SendHint(b.client, func() (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, method, rawURL, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
@@ -136,7 +136,7 @@ func call(ctx context.Context, b *backend, method, rawURL string, body []byte, r
 		if len(msg) > 300 {
 			msg = msg[:300]
 		}
-		return fmt.Errorf("%w %d: %s%s", errStatus, status, msg, rp.Hint(status))
+		return fmt.Errorf("%w %d: %s%s", errStatus, status, msg, hint)
 	}
 	return json.Unmarshal(rb, out)
 }

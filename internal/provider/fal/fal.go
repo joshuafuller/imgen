@@ -138,7 +138,7 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return p
 }
 
-// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+// paidPolicy is apiPolicy for a request that can bill: it is never retried.
 func (c *Client) paidPolicy() httpx.Policy {
 	p := c.apiPolicy()
 	p.Paid = true
@@ -398,7 +398,7 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target stri
 	if err := c.authURL(target); err != nil {
 		return nil, err
 	}
-	status, body, err := httpx.Send(c.httpc(), func() (*http.Request, error) {
+	status, body, hint, err := httpx.SendHint(c.httpc(), func() (*http.Request, error) {
 		r, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(payload))
 		if err != nil {
 			return nil, err
@@ -413,7 +413,7 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target stri
 		return nil, fmt.Errorf("fal: request: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), pol.Hint(status))
+		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), hint)
 	}
 	return body, nil
 }

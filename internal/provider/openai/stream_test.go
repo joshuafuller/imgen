@@ -327,6 +327,9 @@ func TestStreamFailureNoSecondCall(t *testing.T) {
 	t.Cleanup(streamRefused.Clear)
 	status := func(code int, body string) func(*testing.T, http.ResponseWriter) {
 		return func(_ *testing.T, w http.ResponseWriter) {
+			if code == http.StatusTooManyRequests {
+				w.Header().Set("Retry-After", "9")
+			}
 			w.WriteHeader(code)
 			_, _ = io.WriteString(w, body)
 		}
@@ -335,11 +338,12 @@ func TestStreamFailureNoSecondCall(t *testing.T) {
 		name string
 		fail func(*testing.T, http.ResponseWriter)
 		want string
+		end  string // the hint that ends the error
 	}{
-		{"reset before headers", resetConn, "openai: request:"},
-		{"429", status(http.StatusTooManyRequests, `{"error":{"message":"Too many streaming requests."}}`), "HTTP 429"},
-		{"503", status(http.StatusServiceUnavailable, `{"error":{"message":"Streaming is busy."}}`), "HTTP 503"},
-		{"408 stream timeout", status(http.StatusRequestTimeout, "stream timeout"), "HTTP 408"},
+		{"reset before headers", resetConn, "openai: request:", retryHint},
+		{"429", status(http.StatusTooManyRequests, `{"error":{"message":"Too many streaming requests."}}`), "HTTP 429", httpx.RateHint("9")},
+		{"503", status(http.StatusServiceUnavailable, `{"error":{"message":"Streaming is busy."}}`), "HTTP 503", retryHint},
+		{"408 stream timeout", status(http.StatusRequestTimeout, "stream timeout"), "HTTP 408", retryHint},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -360,8 +364,8 @@ func TestStreamFailureNoSecondCall(t *testing.T) {
 			c.Retry = fastRetry()
 			_, onPartial := collectPartials()
 			_, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
-			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "--no-stream") {
-				t.Errorf("err = %v", err)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.HasSuffix(err.Error(), ". "+tc.end) {
+				t.Errorf("err = %v, want %q and the end %q", err, tc.want, tc.end)
 			}
 			if calls.Load() != 1 {
 				t.Errorf("requests %d, want 1", calls.Load())

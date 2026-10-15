@@ -150,7 +150,9 @@ func TestDefaultModelFlow(t *testing.T) {
 	}
 }
 
-func TestIdempotencyKeyStableAcrossRetries(t *testing.T) {
+// The Idempotency-Key does not make imgen repeat a paid submit: a 429 is
+// the answer, after one request that carries the key.
+func TestIdempotencyKeySubmitSentOnce(t *testing.T) {
 	t.Setenv("IMGEN_RETRIES", "3")
 	var keys []string
 	var mu sync.Mutex
@@ -165,8 +167,8 @@ func TestIdempotencyKeyStableAcrossRetries(t *testing.T) {
 	c := higgsfield.New("a", "b")
 	c.BaseURL = srv.URL
 	_, _ = c.Generate(context.Background(), provider.Request{Prompt: "p"})
-	if len(keys) < 2 || keys[0] == "" || keys[0] != keys[1] {
-		t.Fatalf("keys %v", keys)
+	if len(keys) != 1 || keys[0] == "" {
+		t.Fatalf("keys %v, want one request with a key", keys)
 	}
 }
 

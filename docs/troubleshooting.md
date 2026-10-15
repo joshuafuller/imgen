@@ -36,7 +36,7 @@ Start with `imgen doctor`. It checks the rules file, the key file, each provider
 |---|---|---|
 | `HTTP 400` that mentions the size, or `not supported by this provider: aspect ratio ... Try -a 1:1, 4:3, ...` | The size or aspect ratio is not valid for this model | OpenAI: `1024x1024`, `1536x1024`, `1024x1536` or `auto`. Gemini: `1K`, `2K` or `4K` with `-a`. See [Providers](providers.md). |
 | `HTTP 404`, or "model not found" | Wrong or retired model ID | `imgen models -p <provider>`, or `-m latest`. |
-| `HTTP 429` after retries | Rate limit | imgen already retried (`IMGEN_RETRIES`, default 3). Wait, lower `-n`, or switch provider. |
+| `HTTP 429 ... Rate limited: not retried automatically, because a paid request is never sent twice; run it again in 20s` | Rate limit | Rate limited; run it again after the given time ("later" when the provider gave none). imgen never sends a paid request twice, so you are not charged twice. Lower `-n`, or switch provider. |
 | `... Not retried, because the provider may have billed it: run it again to retry` | A network error, timeout (408) or 5xx on a request that can bill | imgen did not send it again, so you are not charged twice. Check the provider's usage page, then run it again or switch provider. A streamed OpenAI call fails the same way: run it again, or add `--no-stream`. |
 | `invalid model ID: ...` | The ID has a character imgen refuses | Model IDs may use only letters, digits and `. _ : / @ + -`. |
 | Blocked, `SAFETY`, or `blockReason` in the message | The provider's safety filter | Reword. Remove real people, brands and violence. Try another provider. |

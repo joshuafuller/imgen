@@ -42,7 +42,7 @@ type Client struct {
 	BaseURL string
 	HTTP    *http.Client
 	// Retry overrides httpx.DefaultPolicy when its Attempts is set. A
-	// generateContent call still retries only a 429.
+	// generateContent call is still never retried.
 	Retry httpx.Policy
 
 	mu     sync.Mutex
@@ -123,7 +123,7 @@ func (c *Client) retryPolicy(inline bool) httpx.Policy {
 }
 
 // paidPolicy is the policy of a generateContent call, which bills: it is
-// retried only after a 429, whatever c.Retry says.
+// never retried, whatever c.Retry says.
 func (c *Client) paidPolicy() httpx.Policy {
 	pol := c.retryPolicy(true)
 	pol.Paid = true
@@ -157,7 +157,7 @@ func (c *Client) do(ctx context.Context, method, u string, body []byte, out any,
 		}
 		return req, nil
 	}
-	status, data, err := httpx.Send(c.httpClient(), newReq, retry)
+	status, data, hint, err := httpx.SendHint(c.httpClient(), newReq, retry)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func (c *Client) do(ctx context.Context, method, u string, body []byte, out any,
 		if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
 			msg = e.Error.Message
 		}
-		return fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, msg, retry.Hint(status))
+		return fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, msg, hint)
 	}
 	if err := json.Unmarshal(data, out); err != nil {
 		return fmt.Errorf("gemini: decode response: %w", err)

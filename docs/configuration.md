@@ -241,7 +241,7 @@ PNG and JPEG outputs carry the imgen version, provider instance and model in the
 
 | Variable | Use |
 |---|---|
-| `IMGEN_RETRIES` | Attempts for HTTP 429, 5xx and network errors. Default `3`. A request that can bill is retried only after a 429; streamed OpenAI calls are not retried. |
+| `IMGEN_RETRIES` | Attempts for downloads, status polls and model lists after HTTP 429, 5xx and network errors. Default `3`. A request that can bill is never retried, not even after a 429. |
 | `IMGEN_PRICES` | Path to a JSON price table that overrides the built-in one. |
 | `IMGEN_MAX_PIXELS` | Largest accepted image, width times height. Default `40000000`. |
 | `GEMINI_BASE_URL`, `OPENAI_BASE_URL` | Endpoints for the built-in `gemini` and `openai` instances when the rules file sets no `base_url`. With `OPENAI_BASE_URL` set, the built-in `openai` instance sends `OPENAI_API_KEY` there if it is set. Instances with their own `base_url` use only their `api_key_env` ([Providers](providers.md#openai)). |

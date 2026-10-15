@@ -157,7 +157,7 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return p
 }
 
-// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+// paidPolicy is apiPolicy for a request that can bill: it is never retried.
 func (c *Client) paidPolicy() httpx.Policy {
 	p := c.apiPolicy()
 	p.Paid = true
@@ -456,7 +456,7 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target stri
 	if u, err := url.Parse(target); err != nil || !c.policy().MayAuth(u) {
 		return errUntrusted
 	}
-	code, resp, err := httpx.Send(c.httpc(), func() (*http.Request, error) {
+	code, resp, hint, err := httpx.SendHint(c.httpc(), func() (*http.Request, error) {
 		r, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(payload))
 		if err != nil {
 			return nil, err
@@ -467,6 +467,13 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target stri
 			r.Header.Set("Content-Type", "application/json")
 		}
 		if idem != "" {
+			// net/http may send a request with this header again on a
+			// reused connection that broke before the answer. Higgsfield
+			// documents that as safe: "If the response is lost, repeat the
+			// same request with the same key. Higgsfield returns the
+			// original request_id without creating or charging for another
+			// generation." (https://docs.higgsfield.ai/docs/concepts/idempotency.md,
+			// fetched 2026-10-15). imgen itself never repeats a submit.
 			r.Header.Set("Idempotency-Key", idem)
 		}
 		return r, nil
@@ -475,7 +482,7 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target stri
 		return err
 	}
 	if code < 200 || code > 299 {
-		return fmt.Errorf("%w %d: %s%s", errHTTPStatus, code, strings.TrimSpace(string(resp)), pol.Hint(code))
+		return fmt.Errorf("%w %d: %s%s", errHTTPStatus, code, strings.TrimSpace(string(resp)), hint)
 	}
 	if err := json.Unmarshal(resp, out); err != nil {
 		return fmt.Errorf("decode response: %w", err)

@@ -57,7 +57,7 @@ type Client struct {
 	// AllModels makes ListModels return every model (local servers use arbitrary IDs).
 	AllModels bool
 	// Retry overrides httpx.DefaultPolicy when its Attempts is set. A
-	// generate or edit call still retries only a 429.
+	// generate or edit call is still never retried.
 	Retry httpx.Policy
 	// Download overrides httpx.ImagePolicy for result-image downloads when its Attempts is set.
 	Download httpx.Policy
@@ -490,29 +490,30 @@ func (c *Client) retryPolicy(inline bool) httpx.Policy {
 }
 
 // paidPolicy is the policy of a generate or edit call, which bills: it is
-// retried only after a 429, whatever c.Retry says.
+// never retried, whatever c.Retry says.
 func (c *Client) paidPolicy() httpx.Policy {
 	pol := c.retryPolicy(true)
 	pol.Paid = true
 	return pol
 }
 
-// send runs newReq with retries and returns the status code and full body.
-func (c *Client) send(newReq func() (*http.Request, error), pol httpx.Policy) (int, []byte, error) {
-	status, body, err := httpx.Send(c.httpc(), newReq, pol)
+// send runs newReq with retries and returns the status code, the full body
+// and the hint for a status error.
+func (c *Client) send(newReq func() (*http.Request, error), pol httpx.Policy) (int, []byte, string, error) {
+	status, body, hint, err := httpx.SendHint(c.httpc(), newReq, pol)
 	if err != nil {
-		return 0, nil, fmt.Errorf("openai: request: %w", err)
+		return 0, nil, "", fmt.Errorf("openai: request: %w", err)
 	}
-	return status, body, nil
+	return status, body, hint, nil
 }
 
 func (c *Client) do(newReq func() (*http.Request, error), pol httpx.Policy) ([]byte, error) {
-	status, body, err := c.send(newReq, pol)
+	status, body, hint, err := c.send(newReq, pol)
 	if err != nil {
 		return nil, err
 	}
 	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("%w%s", statusError(status, body), pol.Hint(status))
+		return nil, fmt.Errorf("%w%s", statusError(status, body), hint)
 	}
 	return body, nil
 }

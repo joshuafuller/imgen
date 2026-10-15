@@ -56,7 +56,7 @@ type Client struct {
 	PollInterval time.Duration
 	// Retry overrides the retry and size policy; nil means httpx.DefaultPolicy.
 	// Downloads use it too, but keep their own (larger) size limit unless
-	// Retry.MaxBytes is set. The prediction create still retries only a 429.
+	// Retry.MaxBytes is set. The prediction create is still never retried.
 	Retry *httpx.Policy
 
 	mu      sync.Mutex
@@ -126,7 +126,7 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return httpx.DefaultPolicy()
 }
 
-// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+// paidPolicy is apiPolicy for a request that can bill: it is never retried.
 func (c *Client) paidPolicy() httpx.Policy {
 	p := c.apiPolicy()
 	p.Paid = true
@@ -329,7 +329,7 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, rawURL stri
 	if err != nil {
 		return nil, err
 	}
-	status, body, err := httpx.Send(c.httpc(), func() (*http.Request, error) {
+	status, body, hint, err := httpx.SendHint(c.httpc(), func() (*http.Request, error) {
 		var rd *bytes.Reader
 		if payload != nil {
 			rd = bytes.NewReader(payload)
@@ -351,7 +351,7 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, rawURL stri
 		return nil, fmt.Errorf("replicate: request: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), pol.Hint(status))
+		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), hint)
 	}
 	return body, nil
 }
