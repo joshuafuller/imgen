@@ -33,3 +33,21 @@ func TestEnhance(t *testing.T) {
 		t.Errorf("code %d %s", c, h.errb.String())
 	}
 }
+
+// GEMINI_BASE_URL / OPENAI_BASE_URL point the built-in instances at a gateway;
+// --enhance must use the same endpoint, not the vendor's public host.
+func TestEnhanceUsesBaseURLOverride(t *testing.T) {
+	h := newHarness(t)
+	h.env.Getenv = func(k string) string {
+		return map[string]string{"GEMINI_BASE_URL": "https://gw.example/gemini"}[k]
+	}
+	var gotCfg enhance.Config
+	h.env.Enhance = func(_ context.Context, cfg enhance.Config, p string) (string, error) {
+		gotCfg = cfg
+		return p, nil
+	}
+	mustRun(t, h, "gen", "-o", t.TempDir(), "--enhance", "a cat")
+	if gotCfg.BaseURL != "https://gw.example/gemini" {
+		t.Errorf("enhance base URL %q, want the GEMINI_BASE_URL gateway", gotCfg.BaseURL)
+	}
+}

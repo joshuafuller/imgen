@@ -466,3 +466,16 @@ func TestFormatNotHonoredNote(t *testing.T) {
 		t.Errorf("matching format must not warn: %q", h2.errb.String())
 	}
 }
+
+// image/svg+xml is what -f svg asks for; it must not trigger the note.
+func TestFormatNoteSVG(t *testing.T) {
+	var b strings.Builder
+	noteFormat(&b, "svg", []provider.Image{{MimeType: "image/svg+xml"}})
+	if b.Len() != 0 {
+		t.Errorf("false note for svg: %q", b.String())
+	}
+	noteFormat(&b, "png", []provider.Image{{MimeType: "image/svg+xml"}})
+	if !strings.Contains(b.String(), "not honored") {
+		t.Errorf("png requested, svg returned: want a note, got %q", b.String())
+	}
+}

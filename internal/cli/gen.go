@@ -227,7 +227,8 @@ func finalPrompt(ctx context.Context, env Env, o *genOpts, prompt string, info i
 		bk := env.Rules.Enhance
 		cfg := enhance.Config{Provider: bk.Provider, Model: bk.Model}
 		if c, ok := env.Rules.Config(bk.Provider); ok {
-			cfg.BaseURL = c.BaseURL
+			c.Name = bk.Provider
+			cfg.BaseURL = effectiveBaseURL(c, env.getenv) // honors GEMINI_/OPENAI_BASE_URL
 		}
 		out, err := env.enhancePrompt(ctx, cfg, prompt)
 		if err != nil {
@@ -632,8 +633,11 @@ func noteFormat(info io.Writer, format string, imgs []provider.Image) {
 		want = "jpeg"
 	}
 	got := strings.TrimPrefix(strings.ToLower(imgs[0].MimeType), "image/")
-	if got == "jpg" {
+	switch got {
+	case "jpg":
 		got = "jpeg"
+	case "svg+xml":
+		got = "svg"
 	}
 	if got != want && got != "" {
 		fmt.Fprintf(info, "note: the provider returned %s; -f %s was not honored\n", strings.ToUpper(got), safe(format))

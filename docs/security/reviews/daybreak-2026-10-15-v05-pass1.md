@@ -49,5 +49,5 @@ The v0.5 candidate does not yet meet the hostile-provider bar. The prompt-inject
 
 Verdict: **No-go for v0.5.** Fix findings 1 and 3 before any release; 4–6 are also release blockers for the stated hostile-provider and QR guarantees. MCP isolation itself passes the prompt-injected-client bar.
 
-Not checked: tests could not run because the read-only sandbox prevented Go from creating `/tmp/go-build*`; `git diff --check` passed.  
+Not checked: tests could not run because the read-only sandbox prevented Go from creating `/tmp/go-build*`; `git diff --check` passed.
 Risk: finding 4 identifies an exposed parser boundary, not a demonstrated terminal CVE; the other findings are directly source-traced.
