@@ -13,6 +13,7 @@ import (
 
 	"github.com/joshuafuller/imgen/internal/envfile"
 	"github.com/joshuafuller/imgen/internal/subenv"
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 const initHelp = `usage: imgen init
@@ -76,7 +77,7 @@ func runInit(args []string, stdout, stderr io.Writer, env Env) error {
 	if err := writeEnvFile(path, lines); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "saved %d key(s) to %s\n", n, path)
+	fmt.Fprintf(stdout, "saved %d key(s) to %s\n", n, safe(path))
 	return nil
 }
 
@@ -162,7 +163,7 @@ func muteEcho(ctx context.Context, r io.Reader) func() {
 	if !ok {
 		return func() {}
 	}
-	if st, err := f.Stat(); err != nil || st.Mode()&os.ModeCharDevice == 0 {
+	if !term.IsTerminal(f) {
 		return func() {}
 	}
 	set := func(arg string) error {

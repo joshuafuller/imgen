@@ -52,6 +52,9 @@ type Env struct {
 	// Live returns the in-place picture for streamed partial images on w, or
 	// nil when w cannot show one; nil means preview.NewLive.
 	Live func(w io.Writer) interactive.Live
+	// Probe detects the graphics of the terminal w once, before an
+	// interactive session reads keys; nil means preview.Probe.
+	Probe func(w io.Writer)
 	// Partial, when set, receives the partial images of every streaming
 	// gen or edit call, whatever the preview settings. The interactive
 	// session sets it on its own calls (which run with --json --quiet).
@@ -66,7 +69,7 @@ type Env struct {
 	Styled func(w io.Writer) bool
 
 	// IsTerminal reports whether a writer is a terminal, so -o - never
-	// writes image bytes to one; nil means a character-device check.
+	// writes image bytes to one; nil means term.IsTerminal.
 	IsTerminal func(w io.Writer) bool
 
 	// Load errors from main. They stop every command but doctor, which
@@ -193,10 +196,10 @@ func exitCode(err error, stderr io.Writer) int {
 		return 0
 	}
 	if ue, ok := errors.AsType[usageError](err); ok {
-		fmt.Fprintln(stderr, "imgen: "+ue.msg)
+		fmt.Fprintln(stderr, "imgen: "+safeLine(ue.msg))
 		return 2
 	}
-	fmt.Fprintln(stderr, "imgen: "+oneLine(err.Error()))
+	fmt.Fprintln(stderr, "imgen: "+safeLine(err.Error()))
 	return 1
 }
 
@@ -211,6 +214,13 @@ func exitOf(err error) int {
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// safe makes text from outside (a provider, a file, a flag) safe to print
+// on a terminal; safeLine also collapses it to one line. JSON output and
+// the history keep the raw text.
+func safe(s string) string { return term.SafeText(s, term.LineMax) }
+
+func safeLine(s string) string { return safe(oneLine(s)) }
 
 type listFlag []string
 
@@ -376,7 +386,7 @@ func resolveModel(ctx context.Context, p provider.Provider, env Env, o *genOpts,
 func reportResult(stderr io.Writer, res *provider.Result, model string, took time.Duration) {
 	fmt.Fprintf(stderr, "time: %s\n", took.Round(time.Millisecond))
 	if res.Model != "" && res.Model != model {
-		fmt.Fprintf(stderr, "api model: %s\n", res.Model)
+		fmt.Fprintf(stderr, "api model: %s\n", safe(res.Model))
 	}
 }
 
@@ -598,7 +608,7 @@ func runModels(args []string, stdout, stderr io.Writer, env Env) error {
 		if m.Created > 0 {
 			created = time.Unix(m.Created, 0).UTC().Format("2006-01-02")
 		}
-		fmt.Fprintf(stdout, "%s\t%s\n", m.ID, created)
+		fmt.Fprintf(stdout, "%s\t%s\n", safe(m.ID), created)
 	}
 	return nil
 }
@@ -649,7 +659,7 @@ func runProviders(args []string, stdout, stderr io.Writer, env Env) error {
 	}
 	if names {
 		for _, n := range env.Rules.Names() {
-			fmt.Fprintln(stdout, n)
+			fmt.Fprintln(stdout, safe(n))
 		}
 		return nil
 	}
@@ -659,7 +669,7 @@ func runProviders(args []string, stdout, stderr io.Writer, env Env) error {
 		if len(c.Command) > 0 {
 			target = strings.Join(c.Command, " ")
 		}
-		fmt.Fprintf(stdout, "%s\ttype=%s\t%s\tdefault=%s\n", n, c.Type, target, c.DefaultModel)
+		fmt.Fprintf(stdout, "%s\ttype=%s\t%s\tdefault=%s\n", safe(n), safe(c.Type), safe(target), safe(c.DefaultModel))
 	}
 	types := provider.Types()
 	sort.Strings(types)

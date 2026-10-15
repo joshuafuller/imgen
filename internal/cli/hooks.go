@@ -11,6 +11,7 @@ import (
 	"github.com/joshuafuller/imgen/internal/interactive"
 	"github.com/joshuafuller/imgen/internal/preview"
 	"github.com/joshuafuller/imgen/internal/progress"
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 // Desktop and network hooks of Env. A nil hook means the real behavior.
@@ -68,11 +69,7 @@ func (e Env) isTerminal(w io.Writer) bool {
 		return e.IsTerminal(w)
 	}
 	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return ok && term.IsTerminal(f)
 }
 
 func (e Env) openFile(path string) error {
@@ -105,6 +102,14 @@ func (e Env) live(w io.Writer) interactive.Live {
 		return l
 	}
 	return nil
+}
+
+func (e Env) probe(w io.Writer) {
+	if e.Probe != nil {
+		e.Probe(w)
+		return
+	}
+	preview.Probe(w)
 }
 
 func (e Env) copyImage(path string) error {
@@ -183,6 +188,6 @@ func afterSave(env Env, o *genOpts, files []string, stderr io.Writer) {
 
 func warn(w io.Writer, quiet bool, what string, err error) {
 	if err != nil && !quiet {
-		_, _ = io.WriteString(w, "warning: "+what+": "+oneLine(err.Error())+"\n")
+		_, _ = io.WriteString(w, "warning: "+what+": "+safeLine(err.Error())+"\n")
 	}
 }

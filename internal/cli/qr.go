@@ -324,7 +324,7 @@ func runQRTries(env Env, q *qrOpts, code *qr.Code, tmp, guidePath, prompt string
 			t.img, t.err = decodeTry(oc)
 		}
 		if t.err != nil {
-			fmt.Fprintf(info, "try %d: %s\n", n, oneLine(t.err.Error()))
+			fmt.Fprintf(info, "try %d: %s\n", n, safeLine(t.err.Error()))
 			tries = append(tries, t)
 			break
 		}

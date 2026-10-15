@@ -12,10 +12,7 @@ import (
 )
 
 // isTTY is replaced in tests so they never need a real terminal.
-var isTTY = func(f *os.File) bool {
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
-}
+var isTTY = IsTerminal
 
 // Enabled reports whether w should get escape codes.
 func Enabled(w io.Writer) bool {

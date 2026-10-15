@@ -147,7 +147,7 @@ func printBatchResult(w, stderr io.Writer, asJSON bool, r batchResult) {
 		return
 	}
 	if r.err != nil {
-		fmt.Fprintf(stderr, "line %d: %s\n", r.line, oneLine(r.err.Error()))
+		fmt.Fprintf(stderr, "line %d: %s\n", r.line, safeLine(r.err.Error()))
 		return
 	}
 	if r.oc.isDry {

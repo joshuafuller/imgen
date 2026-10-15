@@ -72,7 +72,10 @@ type Config struct {
 	Inline func(w io.Writer, path string) (bool, error)
 	// Live returns the in-place picture for partial images, or nil when the
 	// terminal has no graphics. Nil means no streaming.
-	Live   func(w io.Writer) Live
+	Live func(w io.Writer) Live
+	// Probe detects the terminal's graphics once (preview.Probe), before
+	// the key reader starts: the DA1 answer must not race it. Nil means none.
+	Probe  func()
 	Open   func(path string) error
 	Copy   func(path string) error
 	Styled bool // use terminal colors
@@ -114,6 +117,9 @@ func Run(ctx context.Context, cfg Config) (err error) {
 			err = fmt.Errorf("interactive: restore terminal: %w", rerr)
 		}
 	}()
+	if cfg.Probe != nil {
+		cfg.Probe() // before readInput: both read the terminal
+	}
 	stop := make(chan struct{})
 	defer close(stop)
 	s := &session{cfg: cfg, out: cfg.Out, st: term.Style{On: cfg.Styled}, set: cfg.Settings, ev: make(chan event, 64)}
@@ -206,7 +212,7 @@ func (s *session) prompt(ctx context.Context, text string) error {
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(s.out, s.st.Yellow("cancelled"))
 		} else {
-			fmt.Fprintln(s.out, s.st.Red("✗ ")+oneLine(err.Error()))
+			fmt.Fprintln(s.out, s.st.Red("✗ ")+safeLine(err.Error()))
 		}
 		return nil
 	}
@@ -241,7 +247,7 @@ func (s *session) show(path string) {
 		return
 	}
 	if _, err := s.cfg.Inline(s.out, path); err != nil {
-		fmt.Fprintln(s.out, s.st.Yellow("preview: ")+oneLine(err.Error()))
+		fmt.Fprintln(s.out, s.st.Yellow("preview: ")+safeLine(err.Error()))
 	}
 }
 
@@ -250,13 +256,13 @@ func (s *session) show(path string) {
 func (s *session) status(res Result, pick int) string {
 	parts := []string{}
 	if len(res.Files) > 0 {
-		parts = append(parts, s.display(res.Files[pick]))
+		parts = append(parts, safe(s.display(res.Files[pick])))
 	}
 	if len(res.Files) > 1 {
 		parts = append(parts, fmt.Sprintf("%d of %d", pick+1, len(res.Files)))
 	}
 	if res.Model != "" {
-		parts = append(parts, res.Model)
+		parts = append(parts, safe(res.Model))
 	}
 	parts = append(parts, shortDuration(res.Elapsed))
 	if res.CostKnown {
@@ -297,6 +303,12 @@ func shortDuration(d time.Duration) string {
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// safe makes text from outside (a provider, a file, the rules) safe to
+// print on the terminal; safeLine also collapses it to one line.
+func safe(s string) string { return term.SafeText(s, term.LineMax) }
+
+func safeLine(s string) string { return safe(oneLine(s)) }
 
 // ErrNoTerminal means stdin or stderr is not a terminal.
 var ErrNoTerminal = errors.New("interactive mode needs a terminal: stdin and stderr must both be a TTY")

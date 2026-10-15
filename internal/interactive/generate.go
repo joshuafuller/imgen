@@ -111,7 +111,7 @@ func (s *session) spin(frame int, start time.Time) {
 func (s *session) pickVariant(files []string) (int, error) {
 	if !s.showSheet(files) {
 		for i, f := range files {
-			fmt.Fprintf(s.out, "  %d  %s\n", i+1, s.display(f))
+			fmt.Fprintf(s.out, "  %d  %s\n", i+1, safe(s.display(f)))
 		}
 	}
 	sel := 0

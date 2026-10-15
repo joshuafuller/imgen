@@ -118,7 +118,7 @@ func doUpscale(env Env, u *upscaleOpts, src string, info io.Writer) (string, tim
 	}
 	opt := upscaleBackend(env, u)
 	if !opt.Local {
-		fmt.Fprintf(info, "upscale: %s x%d\n", opt.Provider, opt.Scale)
+		fmt.Fprintf(info, "upscale: %s x%d\n", safe(opt.Provider), opt.Scale)
 	}
 	stop := progress.Start(info, "upscaling")
 	start := env.Now()

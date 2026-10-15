@@ -214,16 +214,16 @@ func compareItem(r compareResult) any {
 func printCompare(stdout io.Writer, res []compareResult, sheetPath string) {
 	for _, r := range res {
 		if r.err != nil {
-			fmt.Fprintf(stdout, "%s\terror: %s\n", r.name, oneLine(r.err.Error()))
+			fmt.Fprintf(stdout, "%s\terror: %s\n", safe(r.name), safeLine(r.err.Error()))
 			continue
 		}
 		if r.oc.isDry {
-			fmt.Fprintf(stdout, "%s:\n", r.name)
+			fmt.Fprintf(stdout, "%s:\n", safe(r.name))
 			r.oc.printDry(stdout)
 			continue
 		}
 		for _, f := range r.oc.files {
-			fmt.Fprintf(stdout, "%s\t%s\n", r.name, f.Path)
+			fmt.Fprintf(stdout, "%s\t%s\n", safe(r.name), f.Path)
 		}
 	}
 	if sheetPath != "" {

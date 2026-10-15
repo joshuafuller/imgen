@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 // tty is a real terminal, switched with the termios ioctls.
@@ -21,21 +23,14 @@ type tty struct {
 // terminals, else ErrNoTerminal.
 func Open(stdin io.Reader, stderr io.Writer) (Terminal, error) {
 	in, ok := stdin.(*os.File)
-	if !ok || !isTerminal(in) {
+	if !ok || !term.IsTerminal(in) {
 		return nil, ErrNoTerminal
 	}
 	out, ok := stderr.(*os.File)
-	if !ok || !isTerminal(out) {
+	if !ok || !term.IsTerminal(out) {
 		return nil, ErrNoTerminal
 	}
 	return &tty{fd: in.Fd()}, nil
-}
-
-// isTerminal asks the kernel for the termios: only a terminal has one, so
-// /dev/null and other character devices do not pass.
-func isTerminal(f *os.File) bool {
-	_, err := getTermios(f.Fd())
-	return err == nil
 }
 
 func getTermios(fd uintptr) (*syscall.Termios, error) {

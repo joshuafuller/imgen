@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joshuafuller/imgen/internal/history"
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 const historyHelp = `usage: imgen history [-n 20] [--json] [--cost [--since 7d]]
@@ -91,17 +92,10 @@ func printEntries(w io.Writer, env Env, n int, asJSON bool) error {
 		case !e.CostKnown:
 			status = "$?"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", e.ID, e.Command, e.Provider, e.Model, status, clip(oneLine(e.Prompt), 60))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", safe(e.ID), safe(e.Command), safe(e.Provider), safe(e.Model), status,
+			term.SafeText(oneLine(e.Prompt), 60))
 	}
 	return nil
-}
-
-func clip(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n-1]) + "…"
 }
 
 func printCost(w io.Writer, env Env, since string, asJSON bool) error {
@@ -135,6 +129,6 @@ func printSorted(w io.Writer, kind string, m map[string]float64) {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		fmt.Fprintf(w, "%s\t%s\t$%.3f\n", kind, k, m[k])
+		fmt.Fprintf(w, "%s\t%s\t$%.3f\n", kind, safe(k), m[k])
 	}
 }

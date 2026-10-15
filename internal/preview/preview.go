@@ -19,8 +19,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/joshuafuller/imgen/internal/imgcheck"
 	"github.com/joshuafuller/imgen/internal/subenv"
+	"github.com/joshuafuller/imgen/internal/term"
 	_ "golang.org/x/image/webp" // register decoder
 )
 
@@ -66,11 +66,7 @@ func detectWSL() bool {
 
 func defaultIsTTY(w io.Writer) bool {
 	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return ok && term.IsTerminal(f)
 }
 
 func have(name string) bool {
@@ -231,14 +227,15 @@ func Inline(w io.Writer, path string) (bool, error) {
 		err := showSixel(w, path)
 		return err == nil, err
 	}
-	data, err := readFile(path)
+	img, err := loadImage(path)
+	if err != nil {
+		return false, err
+	}
+	data, err := encodePNG(img)
 	if err != nil {
 		return false, err
 	}
 	if proto == protoKitty {
-		if data, err = toPNG(data); err != nil {
-			return false, err
-		}
 		return true, writeKitty(w, data)
 	}
 	enc := base64.StdEncoding.EncodeToString(data)
@@ -246,20 +243,13 @@ func Inline(w io.Writer, path string) (bool, error) {
 	return err == nil, err
 }
 
-func toPNG(data []byte) ([]byte, error) {
-	if http.DetectContentType(data) == "image/png" {
-		return data, nil
-	}
-	if _, _, _, err := imgcheck.Validate(data, ""); err != nil {
-		return nil, fmt.Errorf("preview: %w", err)
-	}
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("preview: decode image: %w", err)
-	}
+// encodePNG makes a new PNG of decoded pixels. Only these bytes reach the
+// kitty and iTerm2 image decoders, never the ones a provider sent: a chunk
+// it added, or one past a valid header that would not decode, stays out.
+func encodePNG(img image.Image) ([]byte, error) {
 	var b bytes.Buffer
 	if err := png.Encode(&b, img); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("preview: encode image: %w", err)
 	}
 	return b.Bytes(), nil
 }

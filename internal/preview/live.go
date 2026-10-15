@@ -134,21 +134,23 @@ func (l *Live) layout(w, h int) (pw, ph, rows int) {
 }
 
 // frame is the escape sequence of one picture, without a trailing newline.
+// The pixels are decoded in full first; kitty and iTerm2 get a new PNG of
+// them (see encodePNG).
 func (l *Live) frame(data []byte, pw, ph, rows int) (string, error) {
-	switch l.proto {
-	case protoKitty:
-		p, err := toPNG(data)
-		if err != nil {
-			return "", err
-		}
-		return kittyEscape(p, fmt.Sprintf("a=T,f=100,i=%d,r=%d,C=1,q=2", l.id, rows)), nil
-	case protoITerm:
-		return fmt.Sprintf("\x1b]1337;File=inline=1;size=%d;height=%d;preserveAspectRatio=1:%s\a",
-			len(data), rows, base64.StdEncoding.EncodeToString(data)), nil
-	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return "", fmt.Errorf("preview: decode image: %w", err)
 	}
-	return encodeSixel(scaled(img, pw, ph)), nil
+	if l.proto == protoSixel {
+		return encodeSixel(scaled(img, pw, ph)), nil
+	}
+	p, err := encodePNG(img)
+	if err != nil {
+		return "", err
+	}
+	if l.proto == protoKitty {
+		return kittyEscape(p, fmt.Sprintf("a=T,f=100,i=%d,r=%d,C=1,q=2", l.id, rows)), nil
+	}
+	return fmt.Sprintf("\x1b]1337;File=inline=1;size=%d;height=%d;preserveAspectRatio=1:%s\a",
+		len(p), rows, base64.StdEncoding.EncodeToString(p)), nil
 }
