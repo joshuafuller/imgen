@@ -24,6 +24,7 @@ import (
 	_ "github.com/joshuafuller/imgen/internal/provider/recraft"
 	_ "github.com/joshuafuller/imgen/internal/provider/replicate"
 	"github.com/joshuafuller/imgen/internal/rules"
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -36,13 +37,13 @@ func main() {
 	// not be exported into every shell. Fail closed on an insecure file.
 	_, envErr := envfile.Load(envfile.DefaultPath())
 	if envErr != nil && !doctor {
-		fmt.Fprintln(os.Stderr, "imgen:", envErr)
+		fmt.Fprintln(os.Stderr, "imgen:", term.SafeText(envErr.Error(), term.LineMax))
 		os.Exit(1)
 	}
 	r, rulesErr := rules.Load()
 	if rulesErr != nil {
 		if !doctor {
-			fmt.Fprintln(os.Stderr, "imgen:", rulesErr)
+			fmt.Fprintln(os.Stderr, "imgen:", term.SafeText(rulesErr.Error(), term.LineMax))
 			os.Exit(1)
 		}
 		r = rules.Default()
@@ -75,7 +76,7 @@ func serveMCP(env cli.Env) int {
 		return cli.Run(args, stdout, stderr, e)
 	}
 	if err := mcpserver.Serve(ctx, os.Stdin, os.Stdout, run, mcpserver.Options{Providers: mcpserver.DefaultProviders(env.Rules), Version: env.Version}); err != nil {
-		fmt.Fprintln(os.Stderr, "imgen mcp:", err)
+		fmt.Fprintln(os.Stderr, "imgen mcp:", term.SafeText(err.Error(), term.LineMax))
 		return 1
 	}
 	return 0

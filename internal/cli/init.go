@@ -77,7 +77,7 @@ func runInit(args []string, stdout, stderr io.Writer, env Env) error {
 	if err := writeEnvFile(path, lines); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "saved %d key(s) to %s\n", n, path)
+	fmt.Fprintf(stdout, "saved %d key(s) to %s\n", n, safe(path))
 	return nil
 }
 

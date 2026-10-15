@@ -118,9 +118,9 @@ func listPresets(name, help string, args []string, stdout, stderr io.Writer, nam
 	}
 	for _, n := range names {
 		if only {
-			fmt.Fprintln(stdout, n)
+			fmt.Fprintln(stdout, safe(n))
 		} else {
-			fmt.Fprintf(stdout, "%s\t%s\n", n, text(n))
+			fmt.Fprintf(stdout, "%s\t%s\n", safe(n), safe(text(n)))
 		}
 	}
 	return nil

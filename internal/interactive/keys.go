@@ -5,6 +5,8 @@ import (
 	"os"
 	"time"
 	"unicode/utf8"
+
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 // escWait is how long a lone ESC waits for the rest of an escape sequence.
@@ -202,8 +204,8 @@ func (s *session) utf8Rune(lead byte) key {
 		b = append(b, e.b)
 	}
 	r, _ := utf8.DecodeRune(b)
-	if r == utf8.RuneError {
-		return key{}
+	if r == utf8.RuneError || term.IsControl(r) {
+		return key{} // a C1 or bidi control would be echoed raw on the line
 	}
 	return key{code: keyRune, r: r}
 }

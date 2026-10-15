@@ -366,9 +366,9 @@ func (oc *outcome) writeMeta(imgPath string, env Env) (string, error) {
 // summary is the one-line terminal result, such as
 // "✓ 1 image · gemini-3.1-flash-image · 8.8s · ~$0.067".
 func (oc *outcome) summary(st term.Style) string {
-	parts := []string{plural(len(oc.files), "image"), oc.req.Model}
+	parts := []string{plural(len(oc.files), "image"), safe(oc.req.Model)}
 	if oc.apiModel != "" {
-		parts[1] += " (api " + oc.apiModel + ")"
+		parts[1] += " (api " + safe(oc.apiModel) + ")"
 	}
 	switch {
 	case oc.cached:
@@ -393,9 +393,9 @@ func shortDuration(d time.Duration) string {
 func (oc *outcome) printDry(w io.Writer) {
 	d := oc.requestDoc()
 	fmt.Fprintln(w, "dry run: no API call made")
-	fmt.Fprintf(w, "provider: %s (type %s)\n", oc.cfg.Name, oc.cfg.Type)
-	fmt.Fprintf(w, "model: %s\n", oc.req.Model)
-	fmt.Fprintf(w, "prompt: %s\n", d.Prompt)
+	fmt.Fprintf(w, "provider: %s (type %s)\n", safe(oc.cfg.Name), safe(oc.cfg.Type))
+	fmt.Fprintf(w, "model: %s\n", safe(oc.req.Model))
+	fmt.Fprintf(w, "prompt: %s\n", safe(d.Prompt))
 	for _, kv := range [][2]string{
 		{"size", d.Params.Size},
 		{"aspect", d.Params.AspectRatio},
@@ -409,7 +409,7 @@ func (oc *outcome) printDry(w io.Writer) {
 		{"crop", d.Post.Crop},
 	} {
 		if kv[1] != "" {
-			fmt.Fprintf(w, "%s: %s\n", kv[0], kv[1])
+			fmt.Fprintf(w, "%s: %s\n", kv[0], safe(kv[1]))
 		}
 	}
 	fmt.Fprintf(w, "n: %d\n", d.Params.N)
@@ -418,7 +418,7 @@ func (oc *outcome) printDry(w io.Writer) {
 	}
 	if len(d.Params.Extra) > 0 {
 		b, _ := json.Marshal(d.Params.Extra)
-		fmt.Fprintf(w, "extra: %s\n", b)
+		fmt.Fprintf(w, "extra: %s\n", safe(string(b)))
 	}
 	if d.Post.RemoveBG {
 		fmt.Fprintln(w, "remove-bg: yes (output is PNG)")

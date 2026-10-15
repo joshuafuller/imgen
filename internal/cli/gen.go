@@ -234,7 +234,7 @@ func finalPrompt(ctx context.Context, env Env, o *genOpts, prompt string, info i
 			return "", fmt.Errorf("enhance: %w", err)
 		}
 		prompt = out
-		fmt.Fprintf(info, "prompt: %s\n", oneLine(prompt))
+		fmt.Fprintf(info, "prompt: %s\n", safeLine(prompt))
 	}
 	return applyStyles(env.Rules, prompt, o.styles)
 }
@@ -386,7 +386,7 @@ func (oc *outcome) run(ctx context.Context, env Env, info io.Writer) error {
 		return err
 	}
 	if !oc.o.tidy {
-		fmt.Fprintf(info, "model: %s\n", oc.req.Model)
+		fmt.Fprintf(info, "model: %s\n", safe(oc.req.Model))
 	}
 	imgs, err := oc.images(ctx, env, p, info)
 	if err != nil {
@@ -636,6 +636,6 @@ func noteFormat(info io.Writer, format string, imgs []provider.Image) {
 		got = "jpeg"
 	}
 	if got != want && got != "" {
-		fmt.Fprintf(info, "note: the provider returned %s; -f %s was not honored\n", strings.ToUpper(got), format)
+		fmt.Fprintf(info, "note: the provider returned %s; -f %s was not honored\n", strings.ToUpper(got), safe(format))
 	}
 }

@@ -180,6 +180,6 @@ func afterSave(env Env, o *genOpts, files []string, stderr io.Writer) {
 
 func warn(w io.Writer, quiet bool, what string, err error) {
 	if err != nil && !quiet {
-		_, _ = io.WriteString(w, "warning: "+what+": "+oneLine(err.Error())+"\n")
+		_, _ = io.WriteString(w, "warning: "+what+": "+safeLine(err.Error())+"\n")
 	}
 }

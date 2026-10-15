@@ -54,13 +54,13 @@ func (s *session) command(ctx context.Context, line string) error {
 			err := c.run(ctx, s, arg)
 			var u userErr
 			if errors.As(err, &u) {
-				fmt.Fprintln(s.out, s.st.Red("✗ ")+u.msg)
+				fmt.Fprintln(s.out, s.st.Red("✗ ")+safe(u.msg))
 				return nil
 			}
 			return err
 		}
 	}
-	fmt.Fprintf(s.out, "%s unknown command /%s. Type /help for the list.\n", s.st.Red("✗"), name)
+	fmt.Fprintf(s.out, "%s unknown command /%s. Type /help for the list.\n", s.st.Red("✗"), safe(name))
 	return nil
 }
 
@@ -72,7 +72,7 @@ func (e userErr) Error() string { return e.msg }
 func userf(format string, a ...any) error { return userErr{fmt.Sprintf(format, a...)} }
 
 func (s *session) note(format string, a ...any) {
-	fmt.Fprintln(s.out, s.st.Dim(fmt.Sprintf(format, a...)))
+	fmt.Fprintln(s.out, s.st.Dim(safe(fmt.Sprintf(format, a...))))
 }
 
 func cmdNew(ctx context.Context, s *session, arg string) error {
@@ -171,7 +171,7 @@ func cmdHistory(_ context.Context, s *session, _ string) error {
 		if i == len(s.steps)-1 {
 			mark = "*"
 		}
-		fmt.Fprintf(s.out, "%s %d  %s  %s\n", mark, i+1, st.prompt, s.st.Dim(s.display(st.path)))
+		fmt.Fprintf(s.out, "%s %d  %s  %s\n", mark, i+1, safe(st.prompt), s.st.Dim(safe(s.display(st.path))))
 	}
 	return nil
 }
@@ -261,7 +261,7 @@ func cmdSettings(_ context.Context, s *session, _ string) error {
 	if budget == "" {
 		budget = "none (IMGEN_BUDGET unset)"
 	}
-	term.Columns(s.out, "  ", [][2]string{
+	rows := [][2]string{
 		{"provider", orDefault(s.set.Provider)},
 		{"model", orDefault(s.set.Model)},
 		{"aspect", orDefault(s.set.Aspect)},
@@ -272,7 +272,11 @@ func cmdSettings(_ context.Context, s *session, _ string) error {
 		{"output", outDir(s.set)},
 		{"spend", s.spendText() + " this session"},
 		{"budget", budget},
-	})
+	}
+	for i := range rows {
+		rows[i][1] = safe(rows[i][1])
+	}
+	term.Columns(s.out, "  ", rows)
 	return nil
 }
 

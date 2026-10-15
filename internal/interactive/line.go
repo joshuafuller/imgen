@@ -169,7 +169,7 @@ func (s *session) complete(ed *editor) {
 		ed.buf = []rune(prefix + hits[0] + " ")
 	default:
 		ed.buf = []rune(prefix + commonPrefix(hits))
-		fmt.Fprint(s.out, "\n"+s.st.Dim(strings.Join(hits, "  "))+"\n")
+		fmt.Fprint(s.out, "\n"+s.st.Dim(safe(strings.Join(hits, "  ")))+"\n")
 	}
 	ed.pos = len(ed.buf)
 }

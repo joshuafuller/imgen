@@ -246,7 +246,7 @@ func (d doctorReport) write(w io.Writer, st term.Style, version string) {
 	for _, g := range []struct {
 		title string
 		rows  []row
-	}{{"Setup", d.setup}, {"Providers", d.providers}, {"Tools", d.tools}} {
+	}{{"Setup", safeRows(d.setup)}, {"Providers", safeRows(d.providers)}, {"Tools", safeRows(d.tools)}} {
 		if len(g.rows) == 0 {
 			continue
 		}
@@ -276,6 +276,16 @@ func (d doctorReport) write(w io.Writer, st term.Style, version string) {
 	default:
 		fmt.Fprintln(w, `All set. Try: imgen gen "a red fox in fresh snow"`)
 	}
+}
+
+// safeRows is rows with names and details safe to print on a terminal: they
+// carry paths, rules text and the output of codex login status.
+func safeRows(rows []row) []row {
+	out := make([]row, len(rows))
+	for i, r := range rows {
+		out[i] = row{r.st, safe(r.name), safe(r.detail)}
+	}
+	return out
 }
 
 func mark(st term.Style, s state) string {
