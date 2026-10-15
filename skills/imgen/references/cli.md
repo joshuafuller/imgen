@@ -82,7 +82,7 @@ Each short flag also has a long name: `-p --provider`, `-m --model`, `-r --resol
  "elapsed_ms":10162,"cost_usd":0.067,"cost_known":true,"dry_run":false,"text":""}
 ```
 
-On an error: `{"ok":false,"error":"...","exit":1}`. `batch --json` prints one object per line, in input order, with a `line` field.
+On an error: `{"ok":false,"error":"...","exit":1}`. `batch --json` prints one object per line, in input order, with a `line` field. When a 429 made imgen send the paid request again, both objects get `"attempts":N`, and `cost_usd` counts every attempt.
 
 ## Batch file (JSONL)
 
@@ -127,7 +127,7 @@ New API options therefore work with no imgen update.
 | `GEMINI_BASE_URL`, `OPENAI_BASE_URL` | endpoint override for built-in instances |
 | `IMGEN_RULES` | rules file path (default `~/.config/imgen/rules.json`) |
 | `IMGEN_ENV_FILE` | key file (default `~/.config/imgen/env`, must be mode 600; imgen loads it itself) |
-| `IMGEN_RETRIES` | attempts (default 3, with backoff and Retry-After) after 429, 5xx and network errors, for downloads, polls and model lists only; a call that can bill is never retried, 429 included (its error says when to run it again) |
+| `IMGEN_RETRIES` | attempts (default 3, with backoff and Retry-After, at most 60 s a wait) after 429, 5xx and network errors, for downloads, polls and model lists; a paid request is retried after a 429 only on the provider's official API, up to `IMGEN_RETRIES` attempts in all, and each attempt counts in the cost and the budget; a paid request to a custom endpoint is never sent twice (its error says when to run it again) |
 | `IMGEN_PRICES` | JSON file that overrides the built-in price table |
 | `IMGEN_PREVIEW` | `off`, `auto` (default: inline only with kitty/iTerm2/sixel) or `always` (like `--preview`) |
 | `IMGEN_STREAM` | `off` turns off live partial pictures (gen, edit, interactive) |
