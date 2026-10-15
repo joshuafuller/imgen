@@ -25,6 +25,7 @@ Model IDs change often. Run `imgen models -p <provider>` for the live list. The 
 - Background: `-b transparent` with `-f png` or `webp` gives a real alpha channel. **This is the only built-in provider with transparency.**
 - Edit: yes. `imgen edit -i a.png [-i b.png]` uses the multipart edits endpoint. `--mask m.png` limits the edit to the mask's transparent area (same size as the input).
 - Count: `-n 1..` in one call.
+- Cost: the price table covers the three standard sizes. Larger sizes are priced like 1024x1024, and an edit's input images are not counted, so both cost more than imgen shows. Check the OpenAI usage page for real spend.
 - Extra: `--set` keys go into the request body (for example `moderation`, `output_compression`).
 - Strengths: exact sizes, transparency, instruction following, cleaner small text than Gemini (still not reliable).
 

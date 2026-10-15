@@ -15,7 +15,9 @@ Tested patterns. Change prompts freely, and keep the flags.
 - Batch jobs
 - Plate + overlay (diagrams, maps, labeled slides)
 - QR code art
+- Animated game character
 - Drafts cheap, finals sharp
+- Worked examples (repo `examples/`)
 
 ## App icon with transparency
 
@@ -32,7 +34,7 @@ Check the alpha channel: with PIL, `Image.open(p).getchannel('A').getextrema()` 
 imgen gen -p gemini -r 2K -a 1:1 --remove-bg --name mascot "friendly robot mascot, full body"
 ```
 
-`--remove-bg` asks for a flat #00FF00 background, keys it out, and saves a PNG. Avoid green subjects. If edges show a fringe, use OpenAI `-b transparent`.
+`--remove-bg` asks for a flat #00FF00 background, keys it out, and saves a PNG. Keep the prompt short and the subject plain: with a busy photo or a long prompt, Gemini can keep part of the scene or fail with `chroma key: image corners are not green` (billed anyway). Add `--cache`: the raw result is cached before keying, so a failed key does not lose the paid image. The key color comes from the corners, so one corner on a table can pass a bad cutout (one came out 94% opaque); look at the result on a dark background, not only at its alpha. Avoid green subjects. If edges show a fringe or a dark line, use OpenAI `-b transparent`.
 
 ## Logo or concept variants
 
@@ -49,6 +51,8 @@ This saves `logo-1.png` to `logo-4.png`. Show them to the user as a grid and ite
 imgen gen -a 1:1 --name before "studio photo of a plain unbranded white sneaker, no logos, light gray background"
 imgen edit -i before.jpg --name after "same sneaker on a mossy forest floor, morning light; keep the shoe identical, no logos"
 ```
+
+For a real product, edit the user's own photo. Every restage, and an OpenAI transparent cutout, is a redraw: the angle, shape and texture can shift a little, so compare it with the real product before it goes on a listing. `examples/product-studio/` makes the cutout, the scenes and the marketplace sizes, and checks the pure-white main image in code.
 
 ## Masked edit (change one area)
 
@@ -94,7 +98,7 @@ imgen gen -p openai -r 1024x1024 -b transparent -f png --name sheet \
   "a 4x4 grid of 16 flat game item icons (sword, shield, potion, ...), each centered in its cell, equal cells, no text"
 ```
 
-Crop the sheet in code at fixed offsets. Commit both the sheet and the crops.
+Cut the sheet in code through the clear gaps between icons, not at fixed offsets: cells drift (in one sheet the row cuts fell at y=263, 513 and 752, not 256, 512 and 768). Clean the faint alpha haze first, or every trim box comes out too big. `examples/game-assets/` has the slicer. Commit both the sheet and the crops.
 
 ## Batch jobs
 
@@ -138,3 +142,35 @@ imgen draws an exact level-H QR code, Gemini repaints it as the scene, and imgen
 - Drafts: `-p gemini -r 1K`, or `-p openai -q low`, or `-p codex` (no API cost).
 - Finals: `-r 4K` or `-q high`, with a pinned `-m`.
 - Use `--dry-run` to see the request and the cost estimate before a large or expensive call.
+
+## Animated game character
+
+Image models cannot make smooth frames; use a video model for the motion. Run the scripts from a clone of the repo:
+
+```text
+imgen gen -p openai -q high -r 1024x1024 -b transparent -f png --name hero "pixel-art knight, side view facing right, full body, no background, no text"
+(set -a; . ~/.config/imgen/env; set +a; uv run --with pillow python -I examples/sprite/make_video.py hero.png walk.mp4 --character "pixel-art knight")
+uv run --with pillow --with numpy --with scipy python -I examples/sprite/video2sprite.py walk.mp4 hero.png out/ --style pixel
+```
+
+`make_video.py` calls Veo directly (about $0.10 per second at 720p, so about $0.40 for 4 s). That spend is outside imgen: it is not in `IMGEN_BUDGET` or `imgen history`, so tell the user the cost first. The subshell keeps the keys out of your shell. `video2sprite.py` is free and can run again on the same video.
+
+`video2sprite.py` keys only the green (never black, which holds the outline), keeps the video's own positions (pinning the feet adds bounce), crops once around the widest frame (so a swung sword is not cut), and finds the most seamless loop. `--style smooth` keeps full color. Outputs: frames, a GIF, a sheet and a TexturePacker-style atlas.
+
+## Worked examples (repo `examples/`)
+
+Each folder has a README with exact steps, a script for the free part, and small samples. They are in `examples/` of a clone, or at https://github.com/joshuafuller/imgen/tree/main/examples. Prefer copying these over improvising:
+
+| Folder | Use it for |
+|---|---|
+| `app-icons/` | one master icon to iOS `AppIcon.appiconset`, Android adaptive icons, `favicon.ico`, PWA icons |
+| `brand-kit/` | logo variants (color, mono, inverted, small mark), palette, favicon |
+| `social-cards/` | 1200x630 cards from Markdown posts with real-text titles; title edits rebuild for $0 |
+| `thumbnails/` | 1280x720 video thumbnails with bold real-text titles |
+| `product-studio/` | one product photo to a cutout, restaged scenes and marketplace sizes (pure-white main image) |
+| `illustration-pack/` | a consistent set of app illustrations (empty states, 404, offline, success) |
+| `wallpapers/` | one scene generated separately for phone, tablet, desktop and ultrawide |
+| `vtt-tokens/` | round transparent tabletop tokens with name plates from a CSV |
+| `qr-posters/` | printable posters with a scannable art QR code (A4 and Letter, PNG and PDF) |
+| `game-assets/` | an icon sheet sliced through its clear gaps, a seamless tile, portraits, an atlas |
+| `sprite/` | a seamless animated character loop (pixel or smooth) |

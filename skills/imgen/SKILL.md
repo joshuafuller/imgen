@@ -1,6 +1,6 @@
 ---
 name: imgen
-description: "Generate and edit images from the shell with the imgen CLI across Gemini (Nano Banana), OpenAI gpt-image, Codex (ChatGPT login, no API key), Ideogram (text in images), Recraft (SVG/vector), FLUX (BFL), Replicate, fal, Higgsfield, local OpenAI-compatible servers and exec plugins (ComfyUI, diffusers). Use for any request to create, render, draw, illustrate, mock up, restage, cut out or edit an image, including app icons and transparent PNGs, logos and variants, product shots, hero banners, wallpapers and 4K renders, slide and diagram art with exact labels, sprites, style-consistent series, batch jobs, or adding a new image backend or local model to imgen."
+description: "Generate and edit images from the shell with the imgen CLI across Gemini (Nano Banana), OpenAI gpt-image, Codex (ChatGPT login, no API key), Ideogram (text in images), Recraft (SVG/vector), FLUX (BFL), Replicate, fal, Higgsfield, local OpenAI-compatible servers and exec plugins (ComfyUI, diffusers). Use for any request to create, render, draw, illustrate, mock up, restage, cut out or edit an image, including app icons for every platform and transparent PNGs, logos and brand kits, product shots and marketplace listings, social cards and thumbnails with exact titles, hero banners, wallpapers and 4K renders, slide and diagram art with exact labels, QR code art that still scans, tabletop tokens, game assets and animated sprites, style-consistent series, batch jobs, image pipes with other CLI tools, or adding a new image backend or local model to imgen."
 ---
 
 # imgen
@@ -43,6 +43,11 @@ Run `scripts/check_setup.sh` (it wraps `imgen doctor`). It reports whether `imge
 | Grain or speckle in the result | any | `--denoise[=light\|medium\|strong]` |
 | 5120x1440 wallpaper | any (best local) | `--profile wallpaper -p <name>` |
 | Many images | any | `imgen batch -j 4 --json jobs.jsonl` (`--grid` adds `_contact-sheet.png`) |
+| QR code art that still scans | `gemini` (default) | `imgen qr URL "scene"` (`--safe` for print) |
+| Chain with other tools | any | `-i -` reads stdin, `-o -` writes one image to stdout |
+| Animated character | a video model + code | [recipes.md](references/recipes.md#animated-game-character) |
+
+For a common deliverable (icon set, brand kit, social cards, thumbnails, product listing, illustration pack, wallpapers, tokens, QR posters, game assets, sprites), start from the matching worked example: [recipes.md](references/recipes.md#worked-examples-repo-examples).
 
 To iterate, use `imgen edit --last "change X"`. To pick between providers, use `imgen compare -p gemini,openai "..."` and look at `compare-sheet.png`. Check spend with `imgen history --cost`. Use `--json` when you parse results. Use `--meta` when an image must be reproducible. Use `--dry-run` to see the cost before an expensive call. Run `imgen doctor` to see which providers are ready.
 
@@ -54,7 +59,8 @@ Run `imgen providers` to see configured instances. Run `imgen models -p <provide
 - **References:** when you pass a rough sketch as `-i`, the model copies its style. For a polished result, describe the layout in words instead, or pass a polished reference.
 - **Real things:** add "generic, no logos, no brand marks, no flags, no insignia" for products, vehicles and uniforms. Reject any output that shows a real brand, a real person or a real landmark you did not ask for.
 - **Keys:** never print, echo or log API key values. Pass them by env var only.
-- **Cost:** each call costs money (Codex uses plan quota). Use `-q low` / `-r 1K` for drafts. Use 4K / `-q high` only for the final image.
+- **Cost:** each call costs money (Codex uses plan quota). Use `-q low` / `-r 1K` for drafts. Use 4K / `-q high` only for the final image. Run `--dry-run` first for anything with `-n`, `batch`, `compare` or `qr`. Never loop paid calls yourself: imgen never silently resends a request that may have billed, and it counts any retry it makes, so a reported failure means you decide whether to pay again. OpenAI estimates run low above 1536 px and for edits ([providers.md](references/providers.md#openai-gpt-image)).
+- **Know the quirks:** with `-b transparent`, OpenAI swaps the instance's default model for `gpt-image-2.5-flare`, which has real alpha (a model you pass with `-m` is kept, and the run fails if it ignores transparency); Gemini usually returns JPEG and ignores `-f` (imgen notes it), and rejects ratios it does not list, such as 32:9 (`--profile wallpaper` asks 21:9, then crops); `imgen interactive` is for people, never for agents.
 
 ## References (load only what the task needs)
 

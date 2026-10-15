@@ -11,7 +11,7 @@ Write one line per idea, in this order:
 5. **Framing**: "wide shot, three-quarter elevated view, subject centered, space on the left for text".
 6. **Hard rules**: "no text, no letters, no logos, no watermark, no flags".
 
-For a polished commercial look, name the quality bar: "premium, crisp, the kind of art a top design studio makes for a keynote". Then add what to avoid: "not flat clip-art, not cartoon, not photo-real".
+For a polished commercial look, name the quality bar: "premium, crisp, the kind of art a top design studio makes for a keynote". Then add what to avoid: "not flat clip-art, not cartoon, not photo-real". Cliché effects (glows, lens flares, neon edges) read as amateur; leave them out unless asked.
 
 ## Negatives that matter
 
@@ -33,9 +33,22 @@ For a polished commercial look, name the quality bar: "premium, crisp, the kind 
 - Pass the best earlier image as `-i` with "match this style exactly".
 - Pin the model with `-m <exact id>`, not `latest`.
 - Gemini: `--set temperature=0.3` lowers the variation.
+- Check every image against the first: palette, outline weight and subject size drift between calls. Redraw outliers one at a time and keep the accepted set, because a fresh run gives a new look. `examples/illustration-pack/` measures this in code.
 
 ## Edits
 
 - Name what changes **and** what must stay: "make the cube blue; keep the table, light and camera identical".
 - One change per edit works best. Chain several edits rather than one big edit.
 - If an edit changes too much, generate again from the original, not from the edited copy.
+
+## Reference image as a layout guide
+
+A precise image passed with `-i` controls layout far better than words. The model repaints the guide and keeps its structure.
+
+- **QR art:** pass the exact QR code and say "dark squares become X; light squares become Y; keep the exact layout including the three corner squares" (`imgen qr` does this for you).
+- **Anatomy and pose:** for a creature or a figure, first make a clean still in the exact pose and view ("seen from directly above; the small head with eyes and fangs at the TOP; the large abdomen at the BOTTOM, no eyes on it"), then edit or animate from that still. Spell out the anatomy, or models put a face on the largest body part.
+- **Edits that must not move things:** say what stays ("keep the table, light and camera identical").
+
+## Animation
+
+Image models cannot draw a smooth animation frame by frame: poses come out of order, repeat or drift, even with a pose guide. A video model draws motion. To animate a character, make one still, animate it with a video model on a green screen, then key and loop the video in code (see the sprite recipe in [recipes.md](recipes.md#animated-game-character)). Never reverse a video to make an ending land: a reversed gait runs backward.
