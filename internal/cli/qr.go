@@ -148,10 +148,15 @@ func runQR(args []string, stdout, stderr io.Writer, env Env) error {
 			o.name = "qr-guide"
 		}
 		path, err := writeQROut(env, o, guide)
-		if err == nil {
-			qrDone(env, o, stdout, info, path)
+		if err != nil {
+			return err
 		}
-		return err
+		if o.asJSON {
+			b, _ := json.Marshal(map[string]any{"ok": true, "path": path, "version": code.Version, "modules": code.Size * code.Size})
+			fmt.Fprintln(stdout, string(b))
+		}
+		qrDone(env, o, stdout, info, path)
+		return nil
 	}
 	if o.name == "" {
 		o.name = naming.Slug(newRedactor(env).scrub(scene), slugMax)

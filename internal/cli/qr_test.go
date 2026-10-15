@@ -326,3 +326,13 @@ func TestQRRerun(t *testing.T) {
 		t.Fatalf("%d calls, want 2 after rerun", qf.calls)
 	}
 }
+
+func TestQRGuideOnlyJSON(t *testing.T) {
+	h, _ := qrHarness(t, nil)
+	dir := t.TempDir()
+	mustRun(t, h, "qr", "--guide-only", "--json", "-o", dir, repoURL)
+	m := decodeJSON(t, h.out.String())
+	if m["ok"] != true || m["path"] != filepath.Join(dir, "qr-guide.png") || m["version"] != 5.0 {
+		t.Fatalf("json %v", m)
+	}
+}
