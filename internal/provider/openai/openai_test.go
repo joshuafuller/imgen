@@ -272,7 +272,9 @@ func fastRetry() httpx.Policy {
 }
 
 // On a custom endpoint a generate call is sent once, so a 429 is the
-// answer: no second request. The error says when to run it again.
+// answer: no second request. The error says when to run it again, and it is
+// not marked unbilled: a custom endpoint's 429 does not prove that it did
+// not bill.
 func TestGenerate429NotRetried(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -287,7 +289,7 @@ func TestGenerate429NotRetried(t *testing.T) {
 	c := newTestClient(srv)
 	c.Retry = fastRetry()
 	_, err := c.Generate(context.Background(), provider.Request{Model: "m", Prompt: "p"})
-	if calls.Load() != 1 || !errors.Is(err, errHTTPStatus) || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("20")) {
+	if calls.Load() != 1 || !errors.Is(err, errHTTPStatus) || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("20")) || provider.Unbilled(err) {
 		t.Fatalf("err %v calls %d, want 1 call and the 429 error with the rate hint", err, calls.Load())
 	}
 }

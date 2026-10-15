@@ -308,12 +308,13 @@ func TestOfficialSubmitFails(t *testing.T) {
 		submits  int    // submits that reach the server
 		attempts int    // the submits the error counts
 		end      string // the end of the error
+		unbilled bool   // the final response was a 429, which the official API does not bill
 	}{
-		{"408 is not retried", []int{http.StatusRequestTimeout, fine}, false, 408, 1, 1, ". " + httpx.PaidHint},
-		{"500 is not retried", []int{http.StatusInternalServerError, fine}, false, 500, 1, 1, ". " + httpx.PaidHint},
-		{"503 is not retried", []int{http.StatusServiceUnavailable, fine}, false, 503, 1, 1, ". " + httpx.PaidHint},
-		{"429 on every attempt", []int{tooMany}, false, 429, 3, 3, ". " + httpx.RateHintAfter("", 3)},
-		{"429 then 200, then the poll fails", []int{tooMany, fine}, true, 404, 2, 2, ""},
+		{"408 is not retried", []int{http.StatusRequestTimeout, fine}, false, 408, 1, 1, ". " + httpx.PaidHint, false},
+		{"500 is not retried", []int{http.StatusInternalServerError, fine}, false, 500, 1, 1, ". " + httpx.PaidHint, false},
+		{"503 is not retried", []int{http.StatusServiceUnavailable, fine}, false, 503, 1, 1, ". " + httpx.PaidHint, false},
+		{"429 on every attempt", []int{tooMany}, false, 429, 3, 3, ". " + httpx.RateHintAfter("", 3), true},
+		{"429 then 200, then the poll fails", []int{tooMany, fine}, true, 404, 2, 2, "", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -331,6 +332,20 @@ func TestOfficialSubmitFails(t *testing.T) {
 			if !strings.HasSuffix(err.Error(), tc.end) {
 				t.Errorf("err %q, want it to end with %q", err, tc.end)
 			}
+			if provider.Unbilled(err) != tc.unbilled {
+				t.Errorf("unbilled %v, want %v (err %v)", provider.Unbilled(err), tc.unbilled, err)
+			}
 		})
+	}
+}
+
+// With two images, a second submit that gets a 429 to the end fails the
+// call, but the first image was made and billed: the error is not unbilled.
+func TestOfficialPartialRateLimitBilled(t *testing.T) {
+	c, sent := official(t, []int{http.StatusOK, http.StatusTooManyRequests}, false)
+	_, err := generateN(c, 2)
+	if n := sent(); n != 4 || err == nil || provider.AttemptsOf(err) != 3 || provider.Unbilled(err) {
+		t.Fatalf("%d submits err %v (attempts %d, unbilled %v), want 4 submits, 3 attempts and a billed error",
+			n, err, provider.AttemptsOf(err), provider.Unbilled(err))
 	}
 }

@@ -156,13 +156,15 @@ func TestOfficial429Retried(t *testing.T) {
 		calls    int
 		attempts int
 		hint     string // the end of the error; "" for success
+		unbilled bool   // the final response was a 429, which the official API does not bill
 	}{
-		{"generate 429 429 200", gen, "/v1/images/generations", steps(rate, rate, inline), 3, 3, ""},
-		{"edit 429 200", edit, "/v1/images/edits", steps(rate, inline), 2, 2, ""},
-		{"generate 429 three times", gen, "/v1/images/generations", steps(rate), 3, 3, httpx.RateHintAfter("", 3)},
-		{"generate 429 then 503", gen, "/v1/images/generations", steps(rate, busy, inline), 2, 2, httpx.PaidHint},
-		{"generate 503", gen, "/v1/images/generations", steps(busy, inline), 1, 1, httpx.PaidHint},
-		{"download fails after a retry", gen, "/v1/images/generations", steps(rate, linked), 2, 2, "HTTP 404"},
+		{"generate 429 429 200", gen, "/v1/images/generations", steps(rate, rate, inline), 3, 3, "", false},
+		{"edit 429 200", edit, "/v1/images/edits", steps(rate, inline), 2, 2, "", false},
+		{"generate 429 three times", gen, "/v1/images/generations", steps(rate), 3, 3, httpx.RateHintAfter("", 3), true},
+		{"edit 429 three times", edit, "/v1/images/edits", steps(rate), 3, 3, httpx.RateHintAfter("", 3), true},
+		{"generate 429 then 503", gen, "/v1/images/generations", steps(rate, busy, inline), 2, 2, httpx.PaidHint, false},
+		{"generate 503", gen, "/v1/images/generations", steps(busy, inline), 1, 1, httpx.PaidHint, false},
+		{"download fails after a retry", gen, "/v1/images/generations", steps(rate, linked), 2, 2, "HTTP 404", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -194,12 +196,16 @@ func TestOfficial429Retried(t *testing.T) {
 			if err == nil || !strings.HasSuffix(err.Error(), tc.hint) || provider.AttemptsOf(err) != tc.attempts {
 				t.Fatalf("err %v (attempts %d), want it to end with %q and %d attempts", err, provider.AttemptsOf(err), tc.hint, tc.attempts)
 			}
+			if provider.Unbilled(err) != tc.unbilled {
+				t.Fatalf("unbilled %v, want %v (err %v)", provider.Unbilled(err), tc.unbilled, err)
+			}
 		})
 	}
 }
 
 // A streamed call stays one request on the official API: a 429 is the
-// answer, with the hint that says when to run it again.
+// answer, with the hint that says when to run it again. It is not marked
+// unbilled: the cost of a stream is booked as before.
 func TestOfficialStreamNotRetried(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -211,7 +217,7 @@ func TestOfficialStreamNotRetried(t *testing.T) {
 	defer srv.Close()
 	c := officialClient(srv)
 	_, err := c.GenerateStream(context.Background(), provider.Request{Model: "gpt-image-2", Prompt: "p"}, func(provider.Image) {})
-	if calls.Load() != 1 || err == nil || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("9")) || provider.AttemptsOf(err) != 1 {
+	if calls.Load() != 1 || err == nil || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("9")) || provider.AttemptsOf(err) != 1 || provider.Unbilled(err) {
 		t.Fatalf("calls %d err %v, want 1 call and the rate hint", calls.Load(), err)
 	}
 }

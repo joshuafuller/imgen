@@ -257,11 +257,12 @@ func TestOfficial429Retried(t *testing.T) {
 		attempts int    // what Result.Attempts, or the error, counts
 		end      string // the end of the error; "" for success
 		cause    error  // what the error wraps
+		unbilled bool   // the final response was a 429, which the official API does not bill
 	}{
-		{"429 429 200", []int{rate, rate, fine}, fine, 3, 3, "", nil},
-		{"429 three times", []int{rate}, fine, 3, 3, ". " + httpx.RateHintAfter("", 3), errHTTPStatus},
-		{"503", []int{busy, fine}, fine, 1, 1, ". " + httpx.PaidHint, errHTTPStatus},
-		{"429 then 200, then the download fails", []int{rate, fine}, http.StatusNotFound, 2, 2, "HTTP 404", errDownload},
+		{"429 429 200", []int{rate, rate, fine}, fine, 3, 3, "", nil, false},
+		{"429 three times", []int{rate}, fine, 3, 3, ". " + httpx.RateHintAfter("", 3), errHTTPStatus, true},
+		{"503", []int{busy, fine}, fine, 1, 1, ". " + httpx.PaidHint, errHTTPStatus, false},
+		{"429 then 200, then the download fails", []int{rate, fine}, http.StatusNotFound, 2, 2, "HTTP 404", errDownload, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, posts := official(t, tc.paid, tc.download)
@@ -280,6 +281,9 @@ func TestOfficial429Retried(t *testing.T) {
 			}
 			if !errors.Is(err, tc.cause) {
 				t.Errorf("err %q does not wrap %q", err, tc.cause)
+			}
+			if provider.Unbilled(err) != tc.unbilled {
+				t.Errorf("unbilled %v, want %v (err %v)", provider.Unbilled(err), tc.unbilled, err)
 			}
 		})
 	}

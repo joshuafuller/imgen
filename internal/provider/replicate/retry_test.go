@@ -274,12 +274,13 @@ func TestOfficialCreateFails(t *testing.T) {
 		creates  int    // creates that reach the server
 		attempts int    // the creates the error counts
 		end      string // the end of the error
+		unbilled bool   // the final response was a 429, which the official API does not bill
 	}{
-		{"408 is not retried", []int{http.StatusRequestTimeout, fine}, false, 408, 1, 1, ". " + httpx.PaidHint},
-		{"500 is not retried", []int{http.StatusInternalServerError, fine}, false, 500, 1, 1, ". " + httpx.PaidHint},
-		{"503 is not retried", []int{http.StatusServiceUnavailable, fine}, false, 503, 1, 1, ". " + httpx.PaidHint},
-		{"429 on every attempt", []int{tooMany}, false, 429, 3, 3, ". " + httpx.RateHintAfter("", 3)},
-		{"429 then 200, then the poll fails", []int{tooMany, fine}, true, 404, 2, 2, ""},
+		{"408 is not retried", []int{http.StatusRequestTimeout, fine}, false, 408, 1, 1, ". " + httpx.PaidHint, false},
+		{"500 is not retried", []int{http.StatusInternalServerError, fine}, false, 500, 1, 1, ". " + httpx.PaidHint, false},
+		{"503 is not retried", []int{http.StatusServiceUnavailable, fine}, false, 503, 1, 1, ". " + httpx.PaidHint, false},
+		{"429 on every attempt", []int{tooMany}, false, 429, 3, 3, ". " + httpx.RateHintAfter("", 3), true},
+		{"429 then 200, then the poll fails", []int{tooMany, fine}, true, 404, 2, 2, "", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -296,6 +297,9 @@ func TestOfficialCreateFails(t *testing.T) {
 			}
 			if !strings.HasSuffix(err.Error(), tc.end) {
 				t.Errorf("err %q, want it to end with %q", err, tc.end)
+			}
+			if provider.Unbilled(err) != tc.unbilled {
+				t.Errorf("unbilled %v, want %v (err %v)", provider.Unbilled(err), tc.unbilled, err)
 			}
 		})
 	}

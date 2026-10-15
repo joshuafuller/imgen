@@ -151,15 +151,17 @@ func TestOfficial429Retried(t *testing.T) {
 		calls    int
 		attempts int
 		end      string // the end of the error; "" for success
+		unbilled bool   // every request ended with a 429, which the official API does not bill
 	}{
-		{"429 429 200", 1, answers(rate, rate, image), 3, 3, ""},
-		{"n=2, one request gets a 429", 2, answers(rate, image), 3, 2, ""},
-		{"429 three times", 1, answers(rate), 3, 3, ". " + httpx.RateHintAfter("", 3)},
-		{"n=2, 429 every time", 2, answers(rate), 6, 3, ". " + httpx.RateHintAfter("", 3)},
-		{"429 then a response with no image", 1, answers(rate, noOutput), 2, 2, errNoOutput.Error()},
-		{"503", 1, answers(fail(http.StatusServiceUnavailable), image), 1, 1, ". " + httpx.PaidHint},
-		{"408", 1, answers(fail(http.StatusRequestTimeout), image), 1, 1, ". " + httpx.PaidHint},
-		{"network error", 1, answers(resetConn, image), 1, 1, ". " + httpx.PaidHint},
+		{"429 429 200", 1, answers(rate, rate, image), 3, 3, "", false},
+		{"n=2, one request gets a 429", 2, answers(rate, image), 3, 2, "", false},
+		{"429 three times", 1, answers(rate), 3, 3, ". " + httpx.RateHintAfter("", 3), true},
+		{"n=2, 429 every time", 2, answers(rate), 6, 3, ". " + httpx.RateHintAfter("", 3), true},
+		{"n=2, one image, then 429 every time", 2, answers(image, rate), 4, 3, ". " + httpx.RateHintAfter("", 3), false},
+		{"429 then a response with no image", 1, answers(rate, noOutput), 2, 2, errNoOutput.Error(), false},
+		{"503", 1, answers(fail(http.StatusServiceUnavailable), image), 1, 1, ". " + httpx.PaidHint, false},
+		{"408", 1, answers(fail(http.StatusRequestTimeout), image), 1, 1, ". " + httpx.PaidHint, false},
+		{"network error", 1, answers(resetConn, image), 1, 1, ". " + httpx.PaidHint, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -184,6 +186,9 @@ func TestOfficial429Retried(t *testing.T) {
 			}
 			if err == nil || !strings.HasSuffix(err.Error(), tc.end) || provider.AttemptsOf(err) != tc.attempts {
 				t.Fatalf("err %v (attempts %d), want it to end with %q and %d attempts", err, provider.AttemptsOf(err), tc.end, tc.attempts)
+			}
+			if provider.Unbilled(err) != tc.unbilled {
+				t.Fatalf("unbilled %v, want %v (err %v)", provider.Unbilled(err), tc.unbilled, err)
 			}
 		})
 	}

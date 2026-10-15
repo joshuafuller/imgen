@@ -304,10 +304,31 @@ func TestOfficialSubmitServerErrorNotRetried(t *testing.T) {
 			if n := len(keys()); n != 1 {
 				t.Errorf("submits %d, want 1: only a 429 is sent again", n)
 			}
-			if err == nil || !strings.HasSuffix(err.Error(), ". "+httpx.PaidHint) || provider.AttemptsOf(err) != 1 {
+			if err == nil || !strings.HasSuffix(err.Error(), ". "+httpx.PaidHint) || provider.AttemptsOf(err) != 1 || provider.Unbilled(err) {
 				t.Fatalf("err %v (attempts %d), want it to end with the paid hint, after 1 attempt", err, provider.AttemptsOf(err))
 			}
 		})
+	}
+}
+
+// A submit that gets a 429 on every attempt fails the call, which is marked
+// unbilled: the official API refused it each time. With two images, a
+// second submit that gets a 429 to the end leaves the first image billed.
+func TestOfficialRateLimitedToTheEnd(t *testing.T) {
+	t.Setenv("IMGEN_RETRIES", "2")
+	c, keys := official(t, []int{http.StatusTooManyRequests}, fault{})
+	_, err := generate(c)
+	if n := len(keys()); n != 2 || err == nil || provider.AttemptsOf(err) != 2 || !provider.Unbilled(err) {
+		t.Fatalf("submits %d err %v (attempts %d, unbilled %v), want 2 submits and an unbilled error",
+			n, err, provider.AttemptsOf(err), provider.Unbilled(err))
+	}
+	c, keys = official(t, []int{http.StatusOK, http.StatusTooManyRequests}, fault{})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_, err = c.Generate(ctx, provider.Request{Model: "ideogram/v4.0", Prompt: "p", N: 2})
+	if n := len(keys()); n != 3 || err == nil || provider.Unbilled(err) {
+		t.Fatalf("submits %d err %v (unbilled %v), want 3 submits and a billed error: the first image was made",
+			n, err, provider.Unbilled(err))
 	}
 }
 

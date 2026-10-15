@@ -90,17 +90,22 @@ type Result struct {
 	// Attempts is how many times the call's paid request was sent: above 1
 	// only when a 429 on the provider's official API made the backend send
 	// it again. 0 and 1 both mean once. A call that makes several paid
-	// requests (one per image) reports the most times one was sent, so the
-	// estimate times Attempts never undercounts the cost.
+	// requests (one per image) reports the most times one was sent. It is
+	// for information: that API does not bill a 429, so the call costs one
+	// estimate however many attempts it took.
 	Attempts int
 }
 
 // AttemptsError is the error of a call whose paid request was sent more
-// than once, so the caller can count each attempt in the cost. Its text is
-// the cause's.
+// than once, or whose paid requests all ended with a 429 from the
+// provider's official API. Its text is the cause's.
 type AttemptsError struct {
 	Attempts int
-	Err      error
+	// RateLimited is true when every paid request of the call ended with a
+	// 429 from the provider's official API, which does not bill a 429: the
+	// call cost nothing (see Unbilled).
+	RateLimited bool
+	Err         error
 }
 
 func (e *AttemptsError) Error() string { return e.Err.Error() }
@@ -109,11 +114,12 @@ func (e *AttemptsError) Unwrap() error { return e.Err }
 
 // Attempted is the return of a backend's Generate, from the tally of its
 // paid requests (httpx.Combine for several): res with Attempts set to
-// t.Sent, or err wrapped in an AttemptsError when t.Sent is above 1.
+// t.Sent, or err wrapped in an AttemptsError when t.Sent is above 1 or the
+// tally is rate limited.
 func Attempted(res *Result, t httpx.Tally, err error) (*Result, error) {
 	if err != nil {
-		if t.Sent > 1 {
-			err = &AttemptsError{Attempts: t.Sent, Err: err}
+		if t.Sent > 1 || t.RateLimited {
+			err = &AttemptsError{Attempts: t.Sent, RateLimited: t.RateLimited, Err: err}
 		}
 		return nil, err
 	}
@@ -121,6 +127,14 @@ func Attempted(res *Result, t httpx.Tally, err error) (*Result, error) {
 		res.Attempts = t.Sent
 	}
 	return res, nil
+}
+
+// Unbilled reports whether the call that failed with err cost nothing:
+// every paid request ended with a 429 from the provider's official API,
+// which does not bill a 429. Any other failure may have been billed.
+func Unbilled(err error) bool {
+	var ae *AttemptsError
+	return errors.As(err, &ae) && ae.RateLimited
 }
 
 // AttemptsOf is how many times the paid request of the call that failed

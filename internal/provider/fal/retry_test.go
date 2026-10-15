@@ -265,10 +265,12 @@ func TestOfficialSubmit429Retried(t *testing.T) {
 		submits    int
 		attempts   int
 		fails      bool
+		unbilled   bool // the final response was a 429, which the official API does not bill
 	}{
-		{"429 then 200", []int{http.StatusTooManyRequests, http.StatusOK}, false, 2, 2, false},
-		{"503", []int{http.StatusServiceUnavailable, http.StatusOK}, false, 1, 1, true},
-		{"429 then 200, then the status poll fails", []int{http.StatusTooManyRequests, http.StatusOK}, true, 2, 2, true},
+		{"429 then 200", []int{http.StatusTooManyRequests, http.StatusOK}, false, 2, 2, false, false},
+		{"503", []int{http.StatusServiceUnavailable, http.StatusOK}, false, 1, 1, true, false},
+		{"429 then 200, then the status poll fails", []int{http.StatusTooManyRequests, http.StatusOK}, true, 2, 2, true, false},
+		{"429 on every attempt", []int{http.StatusTooManyRequests}, false, 3, 3, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, sent := official(t, tc.submit, tc.failStatus)
@@ -277,8 +279,9 @@ func TestOfficialSubmit429Retried(t *testing.T) {
 				t.Fatalf("submits %d, want %d (err %v)", n, tc.submits, err)
 			}
 			if tc.fails {
-				if err == nil || provider.AttemptsOf(err) != tc.attempts {
-					t.Fatalf("err %v (attempts %d), want an error with %d attempts", err, provider.AttemptsOf(err), tc.attempts)
+				if err == nil || provider.AttemptsOf(err) != tc.attempts || provider.Unbilled(err) != tc.unbilled {
+					t.Fatalf("err %v (attempts %d, unbilled %v), want an error with %d attempts, unbilled %v",
+						err, provider.AttemptsOf(err), provider.Unbilled(err), tc.attempts, tc.unbilled)
 				}
 				return
 			}

@@ -32,6 +32,31 @@ func TestAttempted(t *testing.T) {
 	}
 }
 
+// A call whose paid requests all ended with a 429 from the official API is
+// unbilled, also after one attempt, and through any wrapping. Any other
+// failure is billed: a 429 then a 503, or a 429 from a custom endpoint.
+func TestUnbilled(t *testing.T) {
+	_, err := Attempted(nil, httpx.Tally{Sent: 3, RateLimited: true}, errRate)
+	if !Unbilled(err) || AttemptsOf(err) != 3 || err.Error() != errRate.Error() || !errors.Is(err, errRate) {
+		t.Fatalf("3 attempts: err %v, unbilled %v, attempts %d", err, Unbilled(err), AttemptsOf(err))
+	}
+	if !Unbilled(fmt.Errorf("gen: %w", err)) {
+		t.Fatal("wrapped: want unbilled")
+	}
+	_, err = Attempted(nil, httpx.Tally{Sent: 1, RateLimited: true}, errRate)
+	if !Unbilled(err) || AttemptsOf(err) != 1 || err.Error() != errRate.Error() {
+		t.Fatalf("1 attempt: err %v, unbilled %v, attempts %d", err, Unbilled(err), AttemptsOf(err))
+	}
+	for _, tl := range []httpx.Tally{{Sent: 2}, {Sent: 1}, {}} {
+		if _, err := Attempted(nil, tl, errRate); Unbilled(err) {
+			t.Errorf("tally %+v: unbilled, want billed", tl)
+		}
+	}
+	if Unbilled(nil) || Unbilled(errRate) {
+		t.Error("nil or a plain error: want billed")
+	}
+}
+
 // AttemptsOf reads the count back from an error, through any wrapping; an
 // error without one was sent once.
 func TestAttemptsOf(t *testing.T) {
