@@ -10,7 +10,7 @@ imgen is one Go binary with one external dependency (`golang.org/x/image`). A th
 
 1. **Start-up.** `cmd/imgen` loads the key file (`envfile`) and the rules (`rules`: the embedded defaults plus your rules file).
 2. **Flags.** `cli` parses flags, then applies a `--profile`. Flags you typed win over the profile.
-3. **Prompt.** The prompt comes from the words, `-P file` or stdin. `--enhance` rewrites it with a text model; `--style` texts are appended; `--remove-bg` adds the green-screen instruction.
+3. **Prompt.** The prompt comes from the words, `-P file` or stdin. `--enhance` rewrites it with a text model; `--style` texts are appended; `--remove-bg` adds the screen-color instruction (magenta by default).
 4. **Inputs.** Each `-i` and `--mask` (a path, a URL through `fetch`, or `clip:`) is size-capped and checked by `imgcheck` before any decoder sees it.
 5. **Model.** `-m`, else the instance `default_model`. `-m latest` asks the provider for its model list and picks the newest one that the `deny` list allows.
 6. **Budget and cache.** With `--cache`, a hit returns stored images. Otherwise `pricing` gives the call's top price and `history` holds it against `IMGEN_BUDGET` under a file lock. After the call, the tokens the official API reports set the cost that the history records.

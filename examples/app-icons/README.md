@@ -64,7 +64,7 @@ The favicon is 16 to 48 px, iOS uses icons of 20 to 58 px in notifications and s
 ## Notes and limits
 
 - Needs ImageMagick (`convert`, `identify`, `montage`), `awk` and bash. It was tested with ImageMagick 6.9.12, bash 5.2, and both GNU awk and mawk. `python3` is optional and only checks the JSON.
-- The master needs a real transparent background and a bold, simple mark. OpenAI's `-b transparent` gives one. For another provider, `--remove-bg` keys out a green background, so it is a poor fit for a green mark like this one. Thin lines and fine detail turn to mush at 16 px. If the favicon looks muddy, draw a simpler master with `imgen edit` and run the script on it for the favicon.
+- The master needs a real transparent background and a bold, simple mark. OpenAI's `-b transparent` gives one. For another provider, `--remove-bg` keys out a flat magenta background, which suits a green mark like this one; for a pink or purple mark, use `--remove-bg=green`. Thin lines and fine detail turn to mush at 16 px. If the favicon looks muddy, draw a simpler master with `imgen edit` and run the script on it for the favicon.
 - Not made: iOS 18 dark and tinted icons, macOS and watchOS icons, the Android monochrome layer for themed icons, and the Play Store listing icon.
 - The script checks the files; they were not opened in Xcode or Android Studio.
 - `master.png` is the real master, squeezed from 800 KB to 35 KB (stray near-transparent pixels removed, 16 colors). The sample was built from it with step 2, and running step 2 again gives the same files byte for byte.

@@ -2,7 +2,7 @@
 
 Turn one character image into a looping sprite animation: a walk, an idle, an attack. There are two ways:
 
-- **Images only, all imgen** (about $0.50 on Gemini): one approved hero, one turnaround for the directions, one call per pose. imgen keys out the background and snaps every frame to real pixel art in the hero's palette, and `frames.py` lines the frames up.
+- **Images only, all imgen** (about nine Gemini 1K images): one approved hero, one turnaround for the directions, one call per pose. imgen keys out the background and snaps every frame to real pixel art in the hero's palette, and `frames.py` lines the frames up.
 - **Video** (about $0.40 for Veo, plus the hero): a video model draws real motion, so legs move in the right order. This path is smoother and costs more per try.
 
 ## Images only
@@ -11,7 +11,7 @@ Turn one character image into a looping sprite animation: a walk, an idle, an at
 
 ![The four-frame walk](ranger-walk.gif)
 
-You need `imgen` with a Gemini key and `uv`. The sample cost $0.62: two heroes, one turnaround, and six pose calls (two poses were made again).
+You need `imgen` with a Gemini key and `uv`. The sample made nine Gemini 1K images: two heroes, one turnaround and six poses (two poses were made again). Google lists a 1K image at $0.067, before the text and thinking tokens of each call.
 
 1. Make the hero as a cutout. `--remove-bg` asks for a flat magenta screen and keys it out:
 

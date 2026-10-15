@@ -84,7 +84,7 @@ The script finds the solid colors of the logo with ImageMagick (`-colors`, then 
 ## Notes and limits
 
 - Needs ImageMagick (`convert`, `identify`, `montage`), `awk` and bash. It was tested with ImageMagick 6.9.12, bash 5.2, and both GNU awk and mawk.
-- The logo needs a real transparent background. OpenAI's `-b transparent` gives one. For another provider, `--remove-bg` keys out a green background, so it is a poor fit for a green logo.
+- The logo needs a real transparent background. OpenAI's `-b transparent` gives one. For another provider, `--remove-bg` keys out a flat magenta background (green with `--remove-bg=green`), so use the screen color that the logo does not contain.
 - Mono is decided by lightness: pixels lighter than 85 percent are left out. If an important part of your logo is light, raise the level with `--paper 95`, so only near-white is left out. `--paper 100` keeps the whole shape as a silhouette.
 - Inverted is a plain color negative. It is a quick check, not a designed dark-mode logo.
 - The kit is raster only: PNG and ICO, no SVG.

@@ -42,7 +42,7 @@ py() { # run a Python file with Pillow and numpy
 }
 
 # Provider flags. OpenAI makes a true transparent PNG itself. Gemini cannot make an alpha
-# channel, so --remove-bg asks it for a flat green background and keys that out.
+# channel, so --remove-bg asks it for a flat magenta background and keys that out.
 # OpenAI keeps a soft shadow in the alpha unless you say no. The --remove-bg text already says it.
 case $PROVIDER in
   openai) CUTOUT_RES=${CUTOUT_RES:-2048x2048}

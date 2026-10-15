@@ -62,7 +62,7 @@ See [Configuration](configuration.md#daily-budget).
 
 | Message or symptom | Fix |
 |---|---|
-| `chroma key: image corners are not green; background is not a flat #00FF00` | The model ignored the green-screen request. Retry, simplify the scene, or use `-p openai -b transparent -f png`. |
+| `chroma key: image corners are not magenta; background is not a flat #FF00FF` (`green` and `#00FF00` with `--remove-bg=green`) | The model ignored the screen-color request. Retry, simplify the scene, or use `-p openai -b transparent -f png`. |
 | `image too large for background removal: ... use --resize to shrink it first` | `--remove-bg` works up to 20 megapixels. Add `--resize`. |
 | A transparent background comes out opaque | Gemini and Codex have no alpha output. Use `-p openai -b transparent -f png`, or `--remove-bg`. |
 | Grain or speckle in the output | Add `--denoise`, or `--denoise=medium` / `--denoise=strong`. |

@@ -4,7 +4,7 @@ Tested patterns. Change prompts freely, and keep the flags.
 
 ## Contents
 - App icon with transparency
-- Transparent asset from Gemini (green-screen)
+- Transparent asset from Gemini (magenta screen)
 - Logo or concept variants
 - Product shot, restaged
 - Masked edit (change one area)
@@ -28,7 +28,7 @@ imgen gen -p openai -r 1024x1024 -q high -b transparent -f png --name icon \
 
 Check the alpha channel: with PIL, `Image.open(p).getchannel('A').getextrema()` must start at 0.
 
-## Transparent asset from Gemini (green-screen)
+## Transparent asset from Gemini (magenta screen)
 
 ```sh
 imgen gen -p gemini -r 2K -a 1:1 --remove-bg --name mascot "friendly robot mascot, full body"
@@ -147,7 +147,7 @@ imgen draws an exact level-H QR code, Gemini repaints it as the scene, and imgen
 
 Two paths; both are in the repo's `examples/sprite/`.
 
-**Images only (all imgen, about $0.50 on Gemini):** (1) one hero cutout: `gen -n 2 --remove-bg --cache`, the user picks one = `hero.png`, the anchor; (2) all directions in ONE turnaround call: `edit -a 16:9 --remove-bg --cache -i hero.png "turnaround sheet: front, side facing right, back, same height..."`, then `frames.py split` (one view per call failed: "facing right" kept the front pose); (3) one pose per call: `edit -a 1:1 --remove-bg --cache --pixel 96 --palette hero.png -i hero.png -i views/right.png "...walking. Pose, contact: ..."`, always with the anchor (anchor, never chain), never "feet on one ground line" (the model draws a line); (4) `frames.py loop` puts the feet on one baseline and the torso on one x, and writes the sheet, a TexturePacker atlas and GIFs. Same `-r`/`-a` for every pose, so `--pixel` gives one scale. Weak spot: the two contact poses look alike (no near or far leg); use the video path for real leg motion.
+**Images only (all imgen; about nine Gemini 1K images, which Google lists at $0.067 each):** (1) one hero cutout: `gen -n 2 --remove-bg --cache`, the user picks one = `hero.png`, the anchor; (2) all directions in ONE turnaround call: `edit -a 16:9 --remove-bg --cache -i hero.png "turnaround sheet: front, side facing right, back, same height..."`, then `frames.py split` (one view per call failed: "facing right" kept the front pose); (3) one pose per call: `edit -a 1:1 --remove-bg --cache --pixel 96 --palette hero.png -i hero.png -i views/right.png "...walking. Pose, contact: ..."`, always with the anchor (anchor, never chain), never "feet on one ground line" (the model draws a line); (4) `frames.py loop` puts the feet on one baseline and the torso on one x, and writes the sheet, a TexturePacker atlas and GIFs. Same `-r`/`-a` for every pose, so `--pixel` gives one scale. Weak spot: the two contact poses look alike (no near or far leg); use the video path for real leg motion.
 
 **Video (smooth motion):** image models cannot make smooth frames; a video model draws the motion. Run the scripts from a clone of the repo:
 
