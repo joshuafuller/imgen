@@ -34,17 +34,17 @@ const (
 
 // detect picks the graphics protocol from the environment. Only a terminal
 // known by its variables gets sixel without a query; any other may answer
-// the DA1 query, which is skipped where it is unsafe or unreliable.
+// the DA1 query. Inside tmux or screen there is none: the variables of the
+// outer terminal leak in, and the multiplexer answers DA1 for itself.
 func detect() protocol {
+	term := getenv("TERM")
+	if term == "dumb" || getenv("TMUX") != "" || strings.HasPrefix(term, "screen") || strings.HasPrefix(term, "tmux") {
+		return protoNone
+	}
 	if p := envProtocol(); p != protoNone {
 		return p
 	}
-	term := getenv("TERM")
-	switch {
-	case term == "dumb":
-	case getenv("TMUX") != "" || strings.HasPrefix(term, "screen") || strings.HasPrefix(term, "tmux"):
-		// The multiplexer answers DA1 for itself.
-	case da1Sixel():
+	if da1Sixel() {
 		return protoSixel
 	}
 	return protoNone
@@ -54,8 +54,6 @@ func detect() protocol {
 func envProtocol() protocol {
 	term, prog := getenv("TERM"), getenv("TERM_PROGRAM")
 	switch {
-	case term == "dumb":
-		return protoNone
 	case term == "xterm-kitty" || getenv("KITTY_WINDOW_ID") != "" || term == "xterm-ghostty" || prog == "ghostty":
 		return protoKitty
 	case prog == "iTerm.app" || prog == "WezTerm":
@@ -148,9 +146,10 @@ func scaled(img image.Image, w, h int) *image.NRGBA {
 // Blocks draws the image with Unicode half blocks: each cell shows two
 // pixels, the top one as the foreground of "▀" and the bottom one as its
 // background. It uses 24-bit color when COLORTERM says so, else the
-// 256-color cube. It returns false (and no error) when w is not a TTY.
+// 256-color cube. It returns false (and no error) when w is not a TTY or
+// TERM is "dumb".
 func Blocks(w io.Writer, path string) (bool, error) {
-	if !isTTY(w) {
+	if !isTTY(w) || getenv("TERM") == "dumb" {
 		return false, nil
 	}
 	img, err := loadImage(path)

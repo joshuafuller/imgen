@@ -155,6 +155,16 @@ func TestBlocksNotTTYOrNotImage(t *testing.T) {
 	}
 }
 
+func TestBlocksDumbTerminal(t *testing.T) {
+	f := newFake("linux")
+	f.env["TERM"] = "dumb"
+	termFake(t, f, 80, 24, 10, 20)
+	var b bytes.Buffer
+	if ok, err := Blocks(&b, writeImage(t, quadrants())); ok || err != nil || b.Len() != 0 {
+		t.Fatalf("ok=%v err=%v out=%q", ok, err, b.String())
+	}
+}
+
 func TestBlocksRejectsPixelBomb(t *testing.T) {
 	t.Setenv("IMGEN_MAX_PIXELS", "100")
 	f := newFake("linux")
@@ -187,6 +197,8 @@ func TestDetect(t *testing.T) {
 		{map[string]string{"TERM": "dumb"}, true, protoNone},
 		{map[string]string{"TERM": "tmux-256color", "TMUX": "/tmp/tmux-1/default,1,0"}, true, protoNone},
 		{map[string]string{"TERM": "screen-256color"}, true, protoNone},
+		{map[string]string{"WT_SESSION": "abc", "TMUX": "/tmp/tmux-1/default,1,0", "TERM": "tmux-256color"}, false, protoNone},
+		{map[string]string{"KITTY_WINDOW_ID": "1", "TERM": "screen-256color"}, false, protoNone},
 	}
 	for _, c := range cases {
 		f := newFake("linux")

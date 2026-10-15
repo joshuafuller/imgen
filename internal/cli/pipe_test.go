@@ -228,3 +228,23 @@ func TestReplayArgsPromptAfterStdoutFlag(t *testing.T) {
 		t.Errorf("args %q", got)
 	}
 }
+
+func TestGenOutputStdoutCache(t *testing.T) {
+	h, pf := pngHarness(t, 4, 4, color.White)
+	tick(h)
+	mustRun(t, h, "gen", "--cache", "-o", "-", "--no-embed", "a cat")
+	first := bytes.Clone(h.out.Bytes())
+	mustRun(t, h, "gen", "--cache", "-o", "-", "--no-embed", "a cat")
+	if len(pf.got) != 1 || !bytes.Equal(h.out.Bytes(), first) || !bytes.Equal(first, pf.data) {
+		t.Fatalf("calls %d, same bytes %v", len(pf.got), bytes.Equal(h.out.Bytes(), first))
+	}
+	es := histEntries(t)
+	if len(es) != 2 {
+		t.Fatalf("history %+v", es)
+	}
+	for _, e := range es {
+		if !e.OK || len(e.Files) != 1 || e.Files[0] != "-" {
+			t.Errorf("entry %+v", e)
+		}
+	}
+}

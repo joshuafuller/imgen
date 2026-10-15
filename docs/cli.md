@@ -173,7 +173,7 @@ After `gen`, `edit` and `upscale`, imgen shows the first image in the terminal w
 | iTerm2 | iTerm2, WezTerm |
 | sixel | foot, mlterm, Windows Terminal (`WT_SESSION`), and any other terminal that lists sixel in its answer to the DA1 query, such as xterm started with sixel support |
 
-imgen sends the DA1 query only to the controlling terminal (`/dev/tty`, on Linux), only from the foreground process, and never inside tmux or screen. Pictures fit the terminal width and keep their aspect ratio.
+Inside tmux or screen there are no inline pictures (use `--preview` for half blocks). imgen sends the DA1 query only to the controlling terminal (`/dev/tty`, on Linux) and only from the foreground process. Pictures fit the terminal width and keep their aspect ratio.
 
 `--preview` shows every image, and falls back to Unicode half blocks (`▀`) on a terminal with no graphics: 24-bit color when `COLORTERM` is `truecolor` or `24bit`, else 256 colors. `--no-preview` turns pictures off. `IMGEN_PREVIEW` sets the default: `off`, `auto` (the default) or `always` (the same as `--preview`). The flags win over the variable.
 
