@@ -21,7 +21,13 @@ import (
 var (
 	winsize  = defaultWinsize
 	da1Sixel = sync.OnceValue(queryDA1)
+	// probed is set by Probe. Only then may detect use the DA1 answer: a
+	// query from a plain preview would read the terminal and swallow any
+	// keys the user typed ahead. Probe runs before readers start.
+	probed bool
 )
+
+func markProbed() { probed = true }
 
 // Probe runs the graphics detection for w now, DA1 query included, so an
 // interactive session can do it before it starts reading keys: the answer
@@ -30,6 +36,7 @@ var (
 // never query again. Probe does nothing when w is not a TTY.
 func Probe(w io.Writer) {
 	if isTTY(w) {
+		markProbed()
 		detect()
 	}
 }
@@ -45,8 +52,8 @@ const (
 )
 
 // detect picks the graphics protocol from the environment. Only a terminal
-// known by its variables gets sixel without a query; any other may answer
-// the DA1 query. Inside tmux or screen there is none: the variables of the
+// known by its variables gets sixel without a query; any other gets sixel
+// only from the DA1 answer of an earlier Probe. Inside tmux or screen there is none: the variables of the
 // outer terminal leak in, and the multiplexer answers DA1 for itself.
 func detect() protocol {
 	term := getenv("TERM")
@@ -56,7 +63,7 @@ func detect() protocol {
 	if p := envProtocol(); p != protoNone {
 		return p
 	}
-	if da1Sixel() {
+	if probed && da1Sixel() {
 		return protoSixel
 	}
 	return protoNone

@@ -201,6 +201,7 @@ func TestDetect(t *testing.T) {
 		{map[string]string{"WT_SESSION": "abc", "TMUX": "/tmp/tmux-1/default,1,0", "TERM": "tmux-256color"}, false, protoNone},
 		{map[string]string{"KITTY_WINDOW_ID": "1", "TERM": "screen-256color"}, false, protoNone},
 	}
+	t.Cleanup(func() { probed = false })
 	for _, c := range cases {
 		f := newFake("linux")
 		for k, v := range c.env {
@@ -208,6 +209,7 @@ func TestDetect(t *testing.T) {
 		}
 		termFake(t, f, 80, 24, 10, 20)
 		da1Sixel = func() bool { return c.da1 }
+		probed = true // these cases cover an interactive session that has probed
 		if got := detect(); got != c.want {
 			t.Errorf("%v da1=%v: got %v want %v", c.env, c.da1, got, c.want)
 		}
@@ -316,5 +318,28 @@ func TestParseDA1(t *testing.T) {
 		if got := parseDA1([]byte(in)); got != want {
 			t.Errorf("%q: got %v", in, got)
 		}
+	}
+}
+
+// Daybreak v0.5 pass 2: only an explicit Probe (interactive startup) may send
+// the DA1 query; a plain preview must never read the terminal, which would
+// swallow typeahead.
+func TestDetectNeverQueriesWithoutProbe(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("TERM_PROGRAM", "")
+	t.Setenv("WT_SESSION", "")
+	t.Setenv("KITTY_WINDOW_ID", "")
+	t.Setenv("TMUX", "")
+	queries := 0
+	oldDA1, oldProbed := da1Sixel, probed
+	t.Cleanup(func() { da1Sixel, probed = oldDA1, oldProbed })
+	da1Sixel = func() bool { queries++; return true }
+	probed = false
+	if p := detect(); p != protoNone || queries != 0 {
+		t.Fatalf("without Probe: proto %v, %d DA1 queries; want none", p, queries)
+	}
+	markProbed()
+	if p := detect(); p != protoSixel || queries != 1 {
+		t.Fatalf("after Probe: proto %v, %d DA1 queries; want sixel from 1 query", p, queries)
 	}
 }
