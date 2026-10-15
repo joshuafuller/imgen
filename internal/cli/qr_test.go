@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -259,8 +260,15 @@ func TestQRJSON(t *testing.T) {
 	if m["ok"] != true || m["passed"] != true || m["wrong"] != 0.0 || m["modules"] != 1369.0 || m["path"] == "" {
 		t.Fatalf("json %v", m)
 	}
-	if tries, _ := m["tries"].([]any); len(tries) != 1 {
+	tries, _ := m["tries"].([]any)
+	if len(tries) != 1 {
 		t.Fatalf("tries %v", m["tries"])
+	}
+	try1, _ := tries[0].(map[string]any)
+	for _, k := range []string{"wrong", "finder_wrong", "separator_wrong", "timing_wrong", "pass"} {
+		if _, ok := try1[k]; !ok {
+			t.Errorf("try lacks %q: %v", k, try1)
+		}
 	}
 }
 
@@ -310,10 +318,28 @@ func TestQRDryRun(t *testing.T) {
 	if qf.calls != 0 {
 		t.Fatalf("%d calls in a dry run", qf.calls)
 	}
-	for _, want := range []string{"dry run: no API call made", "inputs: (the QR guide)", "version 5 (37x37 modules)", "up to 3 tries"} {
+	for _, want := range []string{"dry run: no API call made", "inputs: (the QR guide)", "version 5 (37x37 modules)",
+		"cost of one try: ~$0.067", "cost of up to 3 tries: ~$0.201"} {
 		if !strings.Contains(h.out.String(), want) {
 			t.Errorf("dry run lacks %q:\n%s", want, h.out.String())
 		}
+	}
+	if strings.Contains(h.out.String(), "\ncost: ") {
+		t.Errorf("dry run has an unlabelled cost line:\n%s", h.out.String())
+	}
+}
+
+func TestQRDryRunJSON(t *testing.T) {
+	h, qf := qrHarness(t, nil)
+	mustRun(t, h, "qr", "--dry-run", "--json", "-n", "5", repoURL, "koi")
+	if qf.calls != 0 {
+		t.Fatalf("%d calls in a dry run", qf.calls)
+	}
+	m := decodeJSON(t, h.out.String())
+	one, _ := m["cost_usd"].(float64)
+	most, _ := m["cost_usd_max"].(float64)
+	if m["dry_run"] != true || m["tries"] != 5.0 || one <= 0 || math.Abs(most-5*one) > 1e-9 || m["request"] == nil {
+		t.Fatalf("json %v", m)
 	}
 }
 

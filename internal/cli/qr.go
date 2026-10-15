@@ -60,13 +60,24 @@ type qrTry struct {
 }
 
 type qrTryJSON struct {
-	Try    int    `json:"try"`
-	Wrong  int    `json:"wrong"`
-	Finder int    `json:"finder_wrong"`
-	Timing int    `json:"timing_wrong"`
-	Pass   bool   `json:"pass"`
-	Cached bool   `json:"cached,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Try       int    `json:"try"`
+	Wrong     int    `json:"wrong"`
+	Finder    int    `json:"finder_wrong"`
+	Separator int    `json:"separator_wrong"`
+	Timing    int    `json:"timing_wrong"`
+	Pass      bool   `json:"pass"`
+	Cached    bool   `json:"cached,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// qrDryJSON is the --dry-run --json result: the request of one try, plus
+// the cost of all the tries.
+type qrDryJSON struct {
+	jsonResult
+	Tries      int     `json:"tries"`
+	CostUSDMax float64 `json:"cost_usd_max"`
+	Version    int     `json:"version"`
+	Modules    int     `json:"modules"`
 }
 
 type qrJSON struct {
@@ -250,14 +261,43 @@ func qrDry(env Env, q *qrOpts, code *qr.Code, tmp, guidePath, prompt string, std
 	if err != nil {
 		return err
 	}
+	oc.o.inputs = listFlag{"(the QR guide)"} // not the temporary path
+	most := oc.cost * float64(q.tries)
+	if q.gen.asJSON {
+		res := qrDryJSON{jsonResult: oc.jsonResult(0), Tries: q.tries, Version: code.Version, Modules: code.Size * code.Size}
+		if oc.costKnown {
+			res.CostUSDMax = most
+		}
+		b, err := json.Marshal(res)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, string(b))
+		return nil
+	}
 	w := stdout
 	if q.gen.stdout != nil {
 		w = info // stdout carries only image bytes
 	}
-	oc.o.inputs = listFlag{"(the QR guide)"} // not the temporary path
-	oc.printDry(w)
-	fmt.Fprintf(w, "qr: version %d (%dx%d modules), level H, up to %d tries\n", code.Version, code.Size, code.Size, q.tries)
+	// printDry prices one call; label it, since qr makes up to q.tries.
+	var b strings.Builder
+	oc.printDry(&b)
+	report := b.String()
+	if i := strings.LastIndex(report, "\ncost: "); i >= 0 {
+		report = report[:i] + "\ncost of one try: " + report[i+len("\ncost: "):]
+	}
+	fmt.Fprint(w, report)
+	fmt.Fprintf(w, "cost of up to %d tries: %s\n", q.tries, usd(most, oc.costKnown))
+	fmt.Fprintf(w, "qr: version %d (%dx%d modules), level H\n", code.Version, code.Size, code.Size)
 	return nil
+}
+
+// usd formats an estimate as printDry does.
+func usd(cost float64, known bool) string {
+	if !known {
+		return "unknown"
+	}
+	return fmt.Sprintf("~$%.3f", cost)
 }
 
 // qrTryOpts is the edit of one try: the guide as the input, into tmp, with
@@ -318,8 +358,9 @@ func describeReport(r qr.Report) string {
 	if !r.Pass() {
 		verdict = "fail"
 	}
-	return fmt.Sprintf("%d of %d modules wrong (%.1f%%), finder %d, timing %d: %s",
-		r.Wrong, r.Modules, float64(r.Wrong)*100/float64(max(r.Modules, 1)), r.ByKind[qr.Finder], r.ByKind[qr.Timing], verdict)
+	return fmt.Sprintf("%d of %d modules wrong (%.1f%%), finder %d, separator %d, timing %d: %s",
+		r.Wrong, r.Modules, float64(r.Wrong)*100/float64(max(r.Modules, 1)),
+		r.ByKind[qr.Finder], r.ByKind[qr.Separator], r.ByKind[qr.Timing], verdict)
 }
 
 // bestTry is the passing try with the fewest wrong modules, else the
@@ -395,8 +436,8 @@ func qrFailure(tries []qrTry, best *qrTry, serr error) error {
 	if best.report.Pass() {
 		return nil
 	}
-	return fmt.Errorf("no try passed the scan check; saved the best (%d of %d modules wrong, finder %d, timing %d). It may not scan: run it again or raise -n",
-		best.report.Wrong, best.report.Modules, best.report.ByKind[qr.Finder], best.report.ByKind[qr.Timing])
+	return fmt.Errorf("no try passed the scan check; saved the best (%d of %d modules wrong, %d of them in the finder, separator and timing patterns). It may not scan: run it again or raise -n",
+		best.report.Wrong, best.report.Modules, best.report.Patterns())
 }
 
 // recordQR writes one history entry for all the tries.
@@ -432,7 +473,8 @@ func writeQRJSON(w io.Writer, q *qrOpts, code *qr.Code, tries []qrTry, best *qrT
 		if t.err != nil {
 			tj.Error = oneLine(t.err.Error())
 		} else {
-			tj.Wrong, tj.Finder, tj.Timing, tj.Pass = t.report.Wrong, t.report.ByKind[qr.Finder], t.report.ByKind[qr.Timing], t.report.Pass()
+			tj.Wrong, tj.Pass = t.report.Wrong, t.report.Pass()
+			tj.Finder, tj.Separator, tj.Timing = t.report.ByKind[qr.Finder], t.report.ByKind[qr.Separator], t.report.ByKind[qr.Timing]
 			tj.Cached = t.oc.cached
 		}
 		if t.oc != nil {
