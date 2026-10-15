@@ -30,7 +30,7 @@ imgen version                          version, Go version, platform
 
 More commands: `imgen compare -p a,b,c "prompt"` (per-provider files + `compare-sheet.png`), `imgen upscale [--scale 2|4] [--local] in.png`, `imgen history [-n N] [--json] [--cost [--since 7d]]`, `imgen rerun <id|last> [extra flags]`, `imgen styles`, `imgen profiles`, `imgen init`.
 
-Iteration flags: `--last` (edit the newest output), `--open`, `--preview` (every image; half blocks when the terminal has no graphics), `--no-preview`, `--copy`, `--grid` (sheet for `-n`), `--style NAME` (repeatable), `--profile NAME`, `--enhance`, `--cache`, `--quiet`, `--notify`, `--no-embed`, `--embed-prompt` (opt-in: also write the prompt into the file), `--force` (ignore `IMGEN_BUDGET`). `-i` also takes `https://...` URLs, `clip:` and `-` (stdin). Default file names come from the prompt.
+Iteration flags: `--last` (edit the newest output), `--open`, `--preview` (every image; half blocks when the terminal has no graphics), `--no-preview`, `--no-stream` (no live partial pictures), `--copy`, `--grid` (sheet for `-n`), `--style NAME` (repeatable), `--profile NAME`, `--enhance`, `--cache`, `--quiet`, `--notify`, `--no-embed`, `--embed-prompt` (opt-in: also write the prompt into the file), `--force` (ignore `IMGEN_BUDGET`). `-i` also takes `https://...` URLs, `clip:` and `-` (stdin). Default file names come from the prompt.
 
 Pipes (gen, edit, upscale): `-i -` reads the input image from stdin (same size and pixel checks as a file; the prompt must then be words or `-P file`). `-o -` writes exactly one image to stdout and nothing else; it refuses a terminal, `-n` above 1, `--json`, `--meta`, `--grid`, `--open` and `--copy`. History records the output as `-`. `upscale` takes its input as an argument or with `-i`. MCP never accepts `-`.
 
@@ -39,6 +39,8 @@ cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i 
 ```
 
 Pictures in the terminal: after gen, edit and upscale, the first image shows inline on stderr when it is a terminal with kitty, iTerm2 or sixel graphics. Never with `--json`, `--quiet`, `-o -` or in MCP. `IMGEN_PREVIEW=off|auto|always` sets the default.
+
+Live partial pictures: with OpenAI, gen and edit (and interactive mode) also draw two rough partial images in place while the image renders, when the result will show inline. Display only, never saved. Each partial bills 100 image output tokens; the cost line, history and `IMGEN_BUDGET` include them. `--no-stream` turns it off for a call, `IMGEN_STREAM=off` for everything. Never with `-n` above 1, DALL-E, a custom `base_url`, batch, compare or MCP. A refusal to stream (unverified organization) falls back to the normal call and is remembered until the process ends.
 
 The prompt can sit anywhere among the flags. `-P file` reads it from a file, and a prompt of `-` reads stdin.
 
@@ -128,6 +130,7 @@ New API options therefore work with no imgen update.
 | `IMGEN_RETRIES` | attempts for 429/5xx (default 3, with backoff and Retry-After) |
 | `IMGEN_PRICES` | JSON file that overrides the built-in price table |
 | `IMGEN_PREVIEW` | `off`, `auto` (default: inline only with kitty/iTerm2/sixel) or `always` (like `--preview`) |
+| `IMGEN_STREAM` | `off` turns off live partial pictures (gen, edit, interactive) |
 | `IMGEN_MAX_PIXELS` | largest accepted image, width x height (default 40000000); applies to inputs, masks, output and post-processing |
 | `IMGEN_HISTORY_PROMPTS` | `off` omits prompt text from the history and `--meta` sidecars (default on; local 0600 files) |
 | `IMGEN_MCP_MAX_BYTES` | `imgen mcp` only: total bytes of saved images per session (default 536870912; `off` disables); later calls are refused once reached |

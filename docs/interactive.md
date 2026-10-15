@@ -24,6 +24,7 @@ The start flags set the first values of the settings. You can change all of them
 | `--style NAME` | A named style from the rules. |
 | `--profile NAME` | A flag profile from the rules. |
 | `-o`, `--output DIR` | Output folder. Default: the current folder. |
+| `--no-stream` | Do not show live partial pictures while an image renders. `IMGEN_STREAM=off` does the same. |
 
 ## A short session
 
@@ -46,7 +47,7 @@ imgen › /history
 imgen › /quit
 ```
 
-While a call runs, a spinner shows the time. When the call is done, the image shows inline if the terminal can show images (kitty, iTerm2 or WezTerm today). Then one status line shows the saved file, the model, the time, the cost of the call and the total spend of the session.
+While a call runs, a spinner shows the time. With OpenAI on a terminal that can show images, the picture also shows above the spinner while it renders: two rough partial images, each one in the place of the one before. imgen does not save them. Each partial image costs 100 extra image output tokens, and the cost of the call includes them. `--no-stream` or `IMGEN_STREAM=off` turns this off. See [Live partial pictures](cli.md#live-partial-pictures). When the call is done, the image shows inline if the terminal can show images (kitty, iTerm2 or WezTerm today). Then one status line shows the saved file, the model, the time, the cost of the call and the total spend of the session.
 
 ## Prompts and follow-ups
 
