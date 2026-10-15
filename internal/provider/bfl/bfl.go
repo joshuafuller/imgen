@@ -57,7 +57,7 @@ type Client struct {
 	PollInterval time.Duration
 	// Retry overrides the retry and size policy; nil means httpx.DefaultPolicy.
 	// Downloads use it too, but keep their own (larger) size limit unless
-	// Retry.MaxBytes is set.
+	// Retry.MaxBytes is set. The submit POST still retries only a 429.
 	Retry *httpx.Policy
 
 	mu      sync.Mutex
@@ -126,6 +126,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 		return *c.Retry
 	}
 	return httpx.DefaultPolicy()
+}
+
+// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+func (c *Client) paidPolicy() httpx.Policy {
+	p := c.apiPolicy()
+	p.Paid = true
+	return p
 }
 
 func (c *Client) imagePolicy() httpx.Policy {
@@ -358,6 +365,7 @@ func dimensions(sh shape, req provider.Request) (w, h int, err error) {
 }
 
 func (c *Client) one(ctx context.Context, model string, payload []byte) (provider.Image, error) {
+	paid := c.paidPolicy()
 	status, resp, err := httpx.Send(c.httpc(), func() (*http.Request, error) {
 		r, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base()+"/v1/"+model, bytes.NewReader(payload))
 		if err != nil {
@@ -366,12 +374,12 @@ func (c *Client) one(ctx context.Context, model string, payload []byte) (provide
 		c.headers(r)
 		r.Header.Set("Content-Type", "application/json")
 		return r, nil
-	}, c.apiPolicy())
+	}, paid)
 	if err != nil {
 		return provider.Image{}, fmt.Errorf("bfl: submit: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return provider.Image{}, fmt.Errorf("%w %d: %s", errHTTPStatus, status, strings.TrimSpace(string(resp)))
+		return provider.Image{}, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(resp)), paid.Hint(status))
 	}
 	var sub struct {
 		PollingURL string `json:"polling_url"`

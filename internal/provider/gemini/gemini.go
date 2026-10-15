@@ -41,7 +41,8 @@ type Client struct {
 	APIKey  string
 	BaseURL string
 	HTTP    *http.Client
-	// Retry overrides httpx.DefaultPolicy when its Attempts is set.
+	// Retry overrides httpx.DefaultPolicy when its Attempts is set. A
+	// generateContent call still retries only a 429.
 	Retry httpx.Policy
 
 	mu     sync.Mutex
@@ -106,9 +107,9 @@ func (c *Client) httpClient() *http.Client {
 	return c.cached
 }
 
-// send runs newReq with retries and returns the status code and full body.
-// inline marks responses that carry base64 image data and so need the larger body cap.
-func (c *Client) send(newReq func() (*http.Request, error), inline bool) (int, []byte, error) {
+// retryPolicy is c.Retry, else httpx.DefaultPolicy. inline marks responses
+// that carry base64 image data and so need the larger body cap.
+func (c *Client) retryPolicy(inline bool) httpx.Policy {
 	pol := c.Retry
 	if pol.Attempts == 0 {
 		pol = httpx.DefaultPolicy()
@@ -118,10 +119,18 @@ func (c *Client) send(newReq func() (*http.Request, error), inline bool) (int, [
 	} else if inline && pol.MaxBytes <= 0 {
 		pol.MaxBytes = httpx.ImagePolicy().MaxBytes
 	}
-	return httpx.Send(c.httpClient(), newReq, pol)
+	return pol
 }
 
-func (c *Client) do(ctx context.Context, method, u string, body []byte, out any, inline bool) error {
+// paidPolicy is the policy of a generateContent call, which bills: it is
+// retried only after a 429, whatever c.Retry says.
+func (c *Client) paidPolicy() httpx.Policy {
+	pol := c.retryPolicy(true)
+	pol.Paid = true
+	return pol
+}
+
+func (c *Client) do(ctx context.Context, method, u string, body []byte, out any, retry httpx.Policy) error {
 	pu, err := url.Parse(u)
 	if err != nil {
 		return fmt.Errorf("gemini: bad URL: %w", err)
@@ -148,7 +157,7 @@ func (c *Client) do(ctx context.Context, method, u string, body []byte, out any,
 		}
 		return req, nil
 	}
-	status, data, err := c.send(newReq, inline)
+	status, data, err := httpx.Send(c.httpClient(), newReq, retry)
 	if err != nil {
 		return err
 	}
@@ -162,7 +171,7 @@ func (c *Client) do(ctx context.Context, method, u string, body []byte, out any,
 		if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
 			msg = e.Error.Message
 		}
-		return fmt.Errorf("%w %d: %s", errHTTPStatus, status, msg)
+		return fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, msg, retry.Hint(status))
 	}
 	if err := json.Unmarshal(data, out); err != nil {
 		return fmt.Errorf("gemini: decode response: %w", err)
@@ -326,7 +335,7 @@ func (c *Client) Generate(ctx context.Context, r provider.Request) (*provider.Re
 func (c *Client) generateOne(ctx context.Context, model string, body []byte) (*provider.Result, error) {
 	u := fmt.Sprintf("%s/models/%s:generateContent", c.BaseURL, model)
 	var resp response
-	if err := c.do(ctx, http.MethodPost, u, body, &resp, true); err != nil {
+	if err := c.do(ctx, http.MethodPost, u, body, &resp, c.paidPolicy()); err != nil {
 		return nil, err
 	}
 	return parseResponse(&resp, model)
@@ -347,7 +356,7 @@ func (c *Client) ListModels(ctx context.Context) ([]provider.Model, error) {
 			} `json:"models"`
 			NextPageToken string `json:"nextPageToken"`
 		}
-		if err := c.do(ctx, http.MethodGet, c.BaseURL+"/models?"+q.Encode(), nil, &page, false); err != nil {
+		if err := c.do(ctx, http.MethodGet, c.BaseURL+"/models?"+q.Encode(), nil, &page, c.retryPolicy(false)); err != nil {
 			return nil, err
 		}
 		for _, m := range page.Models {

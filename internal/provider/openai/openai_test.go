@@ -270,11 +270,11 @@ func fastRetry() httpx.Policy {
 	return httpx.Policy{Attempts: 3, Base: time.Millisecond, Max: 2 * time.Millisecond}
 }
 
-func TestGenerateRetries503ThenOK(t *testing.T) {
+func TestGenerateRetries429ThenOK(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if calls.Add(1) < 2 {
-			w.WriteHeader(http.StatusServiceUnavailable)
+			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": base64.StdEncoding.EncodeToString([]byte("img"))}}})

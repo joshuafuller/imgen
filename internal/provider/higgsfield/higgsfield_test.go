@@ -159,7 +159,7 @@ func TestIdempotencyKeyStableAcrossRetries(t *testing.T) {
 		keys = append(keys, r.Header.Get("Idempotency-Key"))
 		mu.Unlock()
 		w.Header().Set("Retry-After", "0")
-		w.WriteHeader(http.StatusServiceUnavailable)
+		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 	c := higgsfield.New("a", "b")

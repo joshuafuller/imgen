@@ -157,6 +157,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return p
 }
 
+// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+func (c *Client) paidPolicy() httpx.Policy {
+	p := c.apiPolicy()
+	p.Paid = true
+	return p
+}
+
 func (c *Client) imagePolicy() httpx.Policy {
 	p := httpx.ImagePolicy()
 	if c.MaxBytes > 0 {
@@ -411,7 +418,7 @@ func (c *Client) run(ctx context.Context, model string, body map[string]any) ([]
 		return nil, err
 	}
 	var sub status
-	if err := c.call(ctx, http.MethodPost, c.base()+"/"+model, payload, idem, &sub); err != nil {
+	if err := c.call(ctx, c.paidPolicy(), http.MethodPost, c.base()+"/"+model, payload, idem, &sub); err != nil {
 		return nil, fmt.Errorf("higgsfield: submit: %w", err)
 	}
 	if sub.StatusURL == "" {
@@ -443,8 +450,9 @@ func newKey() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
 }
 
-// call sends one authenticated JSON request and decodes a 2xx answer into out.
-func (c *Client) call(ctx context.Context, method, target string, payload []byte, idem string, out any) error {
+// call sends one authenticated JSON request under pol and decodes a 2xx
+// answer into out.
+func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target string, payload []byte, idem string, out any) error {
 	if u, err := url.Parse(target); err != nil || !c.policy().MayAuth(u) {
 		return errUntrusted
 	}
@@ -462,12 +470,12 @@ func (c *Client) call(ctx context.Context, method, target string, payload []byte
 			r.Header.Set("Idempotency-Key", idem)
 		}
 		return r, nil
-	}, c.apiPolicy())
+	}, pol)
 	if err != nil {
 		return err
 	}
 	if code < 200 || code > 299 {
-		return fmt.Errorf("%w %d: %s", errHTTPStatus, code, strings.TrimSpace(string(resp)))
+		return fmt.Errorf("%w %d: %s%s", errHTTPStatus, code, strings.TrimSpace(string(resp)), pol.Hint(code))
 	}
 	if err := json.Unmarshal(resp, out); err != nil {
 		return fmt.Errorf("decode response: %w", err)
@@ -482,7 +490,7 @@ func (c *Client) poll(ctx context.Context, statusURL string) (*status, error) {
 	}
 	for {
 		var st status
-		if err := c.call(ctx, http.MethodGet, statusURL, nil, "", &st); err != nil {
+		if err := c.call(ctx, c.apiPolicy(), http.MethodGet, statusURL, nil, "", &st); err != nil {
 			return nil, fmt.Errorf("higgsfield: poll: %w", err)
 		}
 		switch st.Status {
@@ -526,7 +534,7 @@ func (c *Client) upload(ctx context.Context, inputs []provider.Image) ([]string,
 			UploadURL string            `json:"upload_url"`
 			Headers   map[string]string `json:"upload_headers"`
 		}
-		if err := c.call(ctx, http.MethodPost, c.base()+"/files/generate-upload-url", req, "", &up); err != nil {
+		if err := c.call(ctx, c.apiPolicy(), http.MethodPost, c.base()+"/files/generate-upload-url", req, "", &up); err != nil {
 			return nil, fmt.Errorf("higgsfield: upload url: %w", err)
 		}
 		if up.PublicURL == "" || up.UploadURL == "" {

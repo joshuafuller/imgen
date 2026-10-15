@@ -56,7 +56,7 @@ type Client struct {
 	PollInterval time.Duration
 	// Retry overrides the retry and size policy; nil means httpx.DefaultPolicy.
 	// Downloads use it too, but keep their own (larger) size limit unless
-	// Retry.MaxBytes is set.
+	// Retry.MaxBytes is set. The prediction create still retries only a 429.
 	Retry *httpx.Policy
 
 	mu      sync.Mutex
@@ -124,6 +124,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 		return *c.Retry
 	}
 	return httpx.DefaultPolicy()
+}
+
+// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+func (c *Client) paidPolicy() httpx.Policy {
+	p := c.apiPolicy()
+	p.Paid = true
+	return p
 }
 
 func (c *Client) imagePolicy() httpx.Policy {
@@ -208,7 +215,7 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.call(ctx, http.MethodPost, c.base()+path, buf)
+	body, err := c.call(ctx, c.paidPolicy(), http.MethodPost, c.base()+path, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +245,7 @@ func (c *Client) finish(ctx context.Context, body []byte) (prediction, error) {
 			return prediction{}, ctx.Err()
 		}
 		var err error
-		body, err = c.call(ctx, http.MethodGet, p.URLs.Get, nil)
+		body, err = c.call(ctx, c.apiPolicy(), http.MethodGet, p.URLs.Get, nil)
 		if err != nil {
 			return prediction{}, err
 		}
@@ -317,7 +324,7 @@ func dataURI(img provider.Image) string {
 	return "data:" + m + ";base64," + base64.StdEncoding.EncodeToString(img.Data)
 }
 
-func (c *Client) call(ctx context.Context, method, rawURL string, payload []byte) ([]byte, error) {
+func (c *Client) call(ctx context.Context, pol httpx.Policy, method, rawURL string, payload []byte) ([]byte, error) {
 	u, err := c.authURL(rawURL)
 	if err != nil {
 		return nil, err
@@ -339,12 +346,12 @@ func (c *Client) call(ctx context.Context, method, rawURL string, payload []byte
 			r.Header.Set("Prefer", "wait")
 		}
 		return r, nil
-	}, c.apiPolicy())
+	}, pol)
 	if err != nil {
 		return nil, fmt.Errorf("replicate: request: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("%w %d: %s", errHTTPStatus, status, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), pol.Hint(status))
 	}
 	return body, nil
 }

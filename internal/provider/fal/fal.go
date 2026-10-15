@@ -138,6 +138,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return p
 }
 
+// paidPolicy is apiPolicy for a request that can bill: only a 429 is retried.
+func (c *Client) paidPolicy() httpx.Policy {
+	p := c.apiPolicy()
+	p.Paid = true
+	return p
+}
+
 func (c *Client) imagePolicy() httpx.Policy {
 	p := httpx.ImagePolicy()
 	if c.MaxBytes > 0 {
@@ -185,7 +192,7 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.call(ctx, http.MethodPost, c.base()+"/"+req.Model, buf)
+	resp, err := c.call(ctx, c.paidPolicy(), http.MethodPost, c.base()+"/"+req.Model, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +209,7 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 	if err := c.wait(ctx, sub.StatusURL); err != nil {
 		return nil, err
 	}
-	out, err := c.call(ctx, http.MethodGet, sub.ResponseURL, nil)
+	out, err := c.call(ctx, c.apiPolicy(), http.MethodGet, sub.ResponseURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +361,7 @@ func ratioSize(aw, ah int) map[string]any {
 
 func (c *Client) wait(ctx context.Context, statusURL string) error {
 	for {
-		body, err := c.call(ctx, http.MethodGet, statusURL, nil)
+		body, err := c.call(ctx, c.apiPolicy(), http.MethodGet, statusURL, nil)
 		if err != nil {
 			return err
 		}
@@ -387,7 +394,7 @@ func dataURI(img provider.Image) string {
 	return "data:" + m + ";base64," + base64.StdEncoding.EncodeToString(img.Data)
 }
 
-func (c *Client) call(ctx context.Context, method, target string, payload []byte) ([]byte, error) {
+func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target string, payload []byte) ([]byte, error) {
 	if err := c.authURL(target); err != nil {
 		return nil, err
 	}
@@ -401,12 +408,12 @@ func (c *Client) call(ctx context.Context, method, target string, payload []byte
 			r.Header.Set("Content-Type", "application/json")
 		}
 		return r, nil
-	}, c.apiPolicy())
+	}, pol)
 	if err != nil {
 		return nil, fmt.Errorf("fal: request: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return nil, fmt.Errorf("%w %d: %s", errHTTPStatus, status, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("%w %d: %s%s", errHTTPStatus, status, strings.TrimSpace(string(body)), pol.Hint(status))
 	}
 	return body, nil
 }

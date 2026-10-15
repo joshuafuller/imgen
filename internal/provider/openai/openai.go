@@ -56,7 +56,8 @@ type Client struct {
 	NameOverride string
 	// AllModels makes ListModels return every model (local servers use arbitrary IDs).
 	AllModels bool
-	// Retry overrides httpx.DefaultPolicy when its Attempts is set.
+	// Retry overrides httpx.DefaultPolicy when its Attempts is set. A
+	// generate or edit call still retries only a 429.
 	Retry httpx.Policy
 	// Download overrides httpx.ImagePolicy for result-image downloads when its Attempts is set.
 	Download httpx.Policy
@@ -268,7 +269,7 @@ func (c *Client) newRequest(ctx context.Context, req provider.Request) func() (*
 
 // plain runs the call without streaming and returns the images.
 func (c *Client) plain(ctx context.Context, req provider.Request) ([]provider.Image, error) {
-	body, err := c.do(c.newRequest(ctx, req), true)
+	body, err := c.do(c.newRequest(ctx, req), c.paidPolicy())
 	if err != nil {
 		return nil, err
 	}
@@ -488,22 +489,30 @@ func (c *Client) retryPolicy(inline bool) httpx.Policy {
 	return pol
 }
 
+// paidPolicy is the policy of a generate or edit call, which bills: it is
+// retried only after a 429, whatever c.Retry says.
+func (c *Client) paidPolicy() httpx.Policy {
+	pol := c.retryPolicy(true)
+	pol.Paid = true
+	return pol
+}
+
 // send runs newReq with retries and returns the status code and full body.
-func (c *Client) send(newReq func() (*http.Request, error), inline bool) (int, []byte, error) {
-	status, body, err := httpx.Send(c.httpc(), newReq, c.retryPolicy(inline))
+func (c *Client) send(newReq func() (*http.Request, error), pol httpx.Policy) (int, []byte, error) {
+	status, body, err := httpx.Send(c.httpc(), newReq, pol)
 	if err != nil {
 		return 0, nil, fmt.Errorf("openai: request: %w", err)
 	}
 	return status, body, nil
 }
 
-func (c *Client) do(newReq func() (*http.Request, error), inline bool) ([]byte, error) {
-	status, body, err := c.send(newReq, inline)
+func (c *Client) do(newReq func() (*http.Request, error), pol httpx.Policy) ([]byte, error) {
+	status, body, err := c.send(newReq, pol)
 	if err != nil {
 		return nil, err
 	}
 	if status < 200 || status > 299 {
-		return nil, statusError(status, body)
+		return nil, fmt.Errorf("%w%s", statusError(status, body), pol.Hint(status))
 	}
 	return body, nil
 }
@@ -562,7 +571,7 @@ func (c *Client) ListModels(ctx context.Context) ([]provider.Model, error) {
 		c.auth(r)
 		return r, nil
 	}
-	body, err := c.do(newReq, false)
+	body, err := c.do(newReq, c.retryPolicy(false))
 	if err != nil {
 		return nil, err
 	}

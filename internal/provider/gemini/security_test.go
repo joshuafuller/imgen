@@ -58,7 +58,7 @@ func TestDoRefusesAuthToForeignHost(t *testing.T) {
 	// Default policy only authorises the Google host; a foreign URL must fail
 	// before any request is made.
 	var out struct{}
-	err := c.do(context.Background(), http.MethodGet, evil.URL+"/x", nil, &out, false)
+	err := c.do(context.Background(), http.MethodGet, evil.URL+"/x", nil, &out, c.retryPolicy(false))
 	if err == nil || hits != 0 {
 		t.Fatalf("err=%v hits=%d", err, hits)
 	}
