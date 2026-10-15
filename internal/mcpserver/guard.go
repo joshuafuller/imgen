@@ -24,6 +24,7 @@ var (
 	errNotImage    = errors.New("not an image file")
 	errBadName     = errors.New(`"name" must be a plain file name (no path separators, no leading dot)`)
 	errUnsafeRoot  = errors.New("unsafe MCP workspace root")
+	errStdio       = errors.New(`"-" (stdin and stdout) is not allowed over MCP: they carry the protocol`)
 )
 
 func initRoot() error {
@@ -80,9 +81,13 @@ func absUnderRoot(p string) string {
 	return filepath.Clean(p)
 }
 
-// guardInput resolves an input image path (following symlinks), requires it
-// to stay inside the root, be a regular file, and sniff as an image.
+// guardInput refuses "-" (the CLI would read stdin), resolves an input image
+// path (following symlinks), requires it to stay inside the root, be a
+// regular file, and sniff as an image.
 func guardInput(p string) (string, error) {
+	if p == "-" {
+		return "", fmt.Errorf("input: %w", errStdio)
+	}
 	resolved, err := filepath.EvalSymlinks(absUnderRoot(p))
 	if err != nil {
 		return "", fmt.Errorf("input %q: %w", p, err)
@@ -108,9 +113,13 @@ func guardInput(p string) (string, error) {
 	return resolved, nil
 }
 
-// guardOutput resolves an output directory that may not exist yet: the
-// deepest existing ancestor is symlink-resolved, then the rest is appended.
+// guardOutput refuses "-" (the CLI would write to stdout) and resolves an
+// output directory that may not exist yet: the deepest existing ancestor is
+// symlink-resolved, then the rest is appended.
 func guardOutput(dir string) (string, error) {
+	if dir == "-" {
+		return "", fmt.Errorf("output_dir: %w", errStdio)
+	}
 	p := absUnderRoot(dir)
 	existing, rest := p, ""
 	for {

@@ -220,3 +220,28 @@ func bombPNGFile(w, h uint32) []byte {
 	_ = binary.Write(&b, binary.BigEndian, crc32.ChecksumIEEE(body))
 	return b.Bytes()
 }
+
+// TestGuardRejectsStdio keeps stdin/stdout image I/O out of MCP: stdin and
+// stdout carry the protocol. "-" is refused even when a file named "-"
+// exists in the root.
+func TestGuardRejectsStdio(t *testing.T) {
+	root := guardRoot(t)
+	for _, name := range []string{"in.png", "-"} {
+		if err := os.WriteFile(filepath.Join(root, name), png1x1, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, js := range []string{
+		`{"prompt":"x","images":["-"]}`,
+		`{"prompt":"x","images":["in.png"],"mask":"-"}`,
+		`{"prompt":"x","images":["in.png"],"output_dir":"-"}`,
+	} {
+		_, err := testServer().genArgs("edit", argsMap(t, js), true)
+		if err == nil || !strings.Contains(err.Error(), "stdin and stdout") {
+			t.Errorf("%s: want a stdio refusal, got %v", js, err)
+		}
+	}
+	if _, err := testServer().genArgs("gen", argsMap(t, `{"prompt":"x","output_dir":"-"}`), false); err == nil {
+		t.Error(`gen output_dir "-" accepted`)
+	}
+}
