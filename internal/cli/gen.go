@@ -16,6 +16,7 @@ import (
 	"github.com/joshuafuller/imgen/internal/enhance"
 	"github.com/joshuafuller/imgen/internal/history"
 	"github.com/joshuafuller/imgen/internal/imgcheck"
+	"github.com/joshuafuller/imgen/internal/interactive"
 	"github.com/joshuafuller/imgen/internal/naming"
 	"github.com/joshuafuller/imgen/internal/post"
 	"github.com/joshuafuller/imgen/internal/pricing"
@@ -90,6 +91,7 @@ type genOpts struct {
 	styles                                                      listFlag
 	last, open, preview, copy, quiet, notify, noEmbed, useCache bool
 	noPreview, autoPreview                                      bool // autoPreview is set by setPreview
+	noStream, stream                                            bool // stream is set by runGen
 	embedPrompt                                                 bool
 	enhance, force, grid                                        bool
 	tidy                                                        bool   // one summary line on a terminal instead of the info lines
@@ -134,6 +136,7 @@ func registerExtraFlags(fs *flag.FlagSet, o *genOpts) {
 	fs.BoolVar(&o.open, "open", false, "open the result in the default viewer")
 	fs.BoolVar(&o.preview, "preview", false, "show the result in the terminal, as half blocks if it has no graphics")
 	fs.BoolVar(&o.noPreview, "no-preview", false, "never show the result in the terminal")
+	fs.BoolVar(&o.noStream, "no-stream", false, "no live partial pictures while the image renders")
 	fs.BoolVar(&o.copy, "copy", false, "copy the first result to the clipboard")
 	fs.BoolVar(&o.quiet, "quiet", false, "no info lines on stderr and no spinner (errors still print)")
 	fs.BoolVar(&o.notify, "notify", false, "send a desktop notice when done")
@@ -416,7 +419,7 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 	oc.dispatched = true
 	stop := progress.Start(info, "generating")
 	start := env.Now()
-	res, err := p.Generate(ctx, oc.req)
+	res, err := oc.generate(ctx, env, p, info, stop)
 	stop()
 	if err != nil {
 		return nil, err
@@ -436,6 +439,32 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 		_ = cache.Put(key, res.Images) // a failed cache write never fails the run
 	}
 	return res.Images, nil
+}
+
+// generate calls the provider, streamed when partial images have somewhere
+// to go: the session hook, or a live picture on the terminal that will show
+// the result. The spinner stops before the first frame, and the picture is
+// erased before anything else prints. Partials are never saved.
+func (oc *outcome) generate(ctx context.Context, env Env, p provider.Provider, info io.Writer, stop func()) (*provider.Result, error) {
+	s, ok := p.(provider.Streamer)
+	if !ok || oc.o.noStream {
+		return p.Generate(ctx, oc.req)
+	}
+	if env.Partial != nil {
+		return s.GenerateStream(ctx, oc.req, env.Partial)
+	}
+	var live interactive.Live
+	if oc.o.stream {
+		live = env.live(info)
+	}
+	if live == nil {
+		return p.Generate(ctx, oc.req)
+	}
+	defer live.Done()
+	return s.GenerateStream(ctx, oc.req, func(img provider.Image) {
+		stop()
+		_ = live.Draw(img.Data) // display only: a frame that fails is skipped
+	})
 }
 
 // reserveBudget holds the estimated cost against IMGEN_BUDGET before the paid
@@ -548,6 +577,7 @@ func runGen(args []string, stdout, stderr io.Writer, env Env, edit bool) error {
 		return err
 	}
 	setPreview(env, o, stderr)
+	setStream(o)
 	o.histArgs = sanitizeArgs(env, args)
 	info := stderr
 	if o.quiet {

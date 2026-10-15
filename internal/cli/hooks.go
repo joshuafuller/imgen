@@ -8,6 +8,7 @@ import (
 
 	"github.com/joshuafuller/imgen/internal/enhance"
 	"github.com/joshuafuller/imgen/internal/history"
+	"github.com/joshuafuller/imgen/internal/interactive"
 	"github.com/joshuafuller/imgen/internal/preview"
 	"github.com/joshuafuller/imgen/internal/progress"
 )
@@ -95,6 +96,17 @@ func (e Env) blocks(w io.Writer, path string) (bool, error) {
 	return preview.Blocks(w, path)
 }
 
+// live returns the in-place picture for partial images on w, or nil.
+func (e Env) live(w io.Writer) interactive.Live {
+	if e.Live != nil {
+		return e.Live(w)
+	}
+	if l := preview.NewLive(w); l != nil {
+		return l
+	}
+	return nil
+}
+
 func (e Env) copyImage(path string) error {
 	if e.CopyImage != nil {
 		return e.CopyImage(path)
@@ -132,6 +144,13 @@ func setPreview(env Env, o *genOpts, stderr io.Writer) {
 	case mode != "off":
 		o.autoPreview = env.style(stderr).On
 	}
+}
+
+// setStream turns on the live partial pictures when the result will be
+// shown in the terminal, unless --no-stream. Only gen and edit call it:
+// batch jobs run side by side.
+func setStream(o *genOpts) {
+	o.stream = (o.preview || o.autoPreview) && !o.noStream
 }
 
 // afterSave runs the preview, --open and --copy on the saved files. Failures

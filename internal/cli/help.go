@@ -176,6 +176,7 @@ func genFlagHelp(cmd string) []helpGroup {
 			{"--open", "open the result in the default viewer"},
 			{"--preview", "show the result in the terminal, as half blocks if it has no graphics"},
 			{"--no-preview", "never show the result in the terminal (default: inline on kitty, iTerm2, sixel)"},
+			{"--no-stream", "no live partial pictures while it renders (default: on with the preview, openai)"},
 			{"--copy", "copy the first result to the clipboard"},
 			{"--notify", "send a desktop notice when done"},
 		}},
