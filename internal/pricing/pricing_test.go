@@ -86,3 +86,53 @@ func TestBadOverrideFallsBack(t *testing.T) {
 		t.Error("missing file should be ignored")
 	}
 }
+
+// Each streamed partial image is 100 image output tokens at the model's
+// image output rate (official per-1M-token rates).
+func TestPartials(t *testing.T) {
+	t.Setenv("IMGEN_PRICES", "")
+	cases := []struct {
+		prov, model string
+		n           int
+		want        float64
+		ok          bool
+	}{
+		{"openai", "gpt-image-2", 2, 2 * 100 * 30 / 1e6, true},
+		{"openai", "gpt-image-2-2026-04-21", 1, 100 * 30 / 1e6, true},
+		{"openai", "gpt-image-2.5-sunburst", 2, 2 * 100 * 30 / 1e6, true},
+		{"openai", "gpt-image-2.5-flare", 2, 2 * 100 * 30 / 1e6, true},
+		{"openai", "gpt-image-1.5", 2, 2 * 100 * 32 / 1e6, true},
+		{"openai", "gpt-image-1-mini", 2, 2 * 100 * 8 / 1e6, true},
+		{"openai", "gpt-image-1", 3, 3 * 100 * 40 / 1e6, true},
+		{"openai", "gpt-image-2", 0, 0, true},
+		{"gemini", "gemini-2.5-flash-image", 2, 0, false}, // no image output rate
+		{"openai", "dall-e-9", 2, 0, false},
+	}
+	for _, c := range cases {
+		got, ok := Partials(c.prov, c.model, c.n)
+		if ok != c.ok || !near(got, c.want) {
+			t.Errorf("%s %s x%d: got %v %v, want %v %v", c.prov, c.model, c.n, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+func TestPartialsOverride(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "p.json")
+	body := `{"models":[{"provider":"openai","match":"my-model*","price":0.01,"image_output_per_mtok":10},
+		{"provider":"openai","match":"no-rate*","price":0.01},
+		{"provider":"openai","match":"gpt-image-2*","price":0.5}]}`
+	if err := os.WriteFile(f, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("IMGEN_PRICES", f)
+	if got, ok := Partials("openai", "my-model-1", 2); !ok || !near(got, 2*100*10/1e6) {
+		t.Errorf("override rate: %v %v", got, ok)
+	}
+	if _, ok := Partials("openai", "no-rate-1", 2); ok {
+		t.Error("an entry without a rate prices partials")
+	}
+	// A price override without a rate keeps the built-in rate.
+	if got, ok := Partials("openai", "gpt-image-2", 2); !ok || !near(got, 2*100*30/1e6) {
+		t.Errorf("built-in rate lost under an override: %v %v", got, ok)
+	}
+}
