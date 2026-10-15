@@ -168,6 +168,7 @@ Gemini, OpenAI and Codex are tested with real images. The other API providers ar
 | [Providers](docs/providers.md) | Keys, models, sizes and support per backend |
 | [Configuration](docs/configuration.md) | Rules file, styles, profiles, budget, history and cache |
 | [Recipes](docs/recipes.md) | Icons, product shots, diagrams, wallpapers, batches |
+| [Interop recipes](docs/interop.md) | Pipes, ImageMagick, ffmpeg, jq, xargs, fzf, history |
 | [MCP server](docs/mcp.md) | Agent setup, tools and safety policy |
 | [Local models](docs/local-models.md) | ComfyUI and Qwen-Image-2.1 on your own GPU |
 | [Extending](docs/extending.md) | Local servers, exec plugins, native Go providers |
