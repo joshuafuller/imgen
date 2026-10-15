@@ -108,23 +108,43 @@ func TestVerifyFailsOnManyWrong(t *testing.T) {
 	}
 }
 
-func TestVerifyFailsOnBrokenFinder(t *testing.T) {
+// Up to MaxPatternWrong clearly wrong modules in the finder, separator and
+// timing patterns still pass; phones read past one or two.
+func TestVerifyAllowsTwoPatternModules(t *testing.T) {
 	c := repoCode(t)
 	im := c.Image(20, QuietZone)
-	paint(im, 20, 3, 3, false) // the center of the top-left finder
+	paint(im, 20, 3, 3, false)  // the center of the top-left finder
+	paint(im, 20, 10, 6, false) // a dark timing module
 	r := Verify(im, c)
-	if r.ByKind[Finder] != 1 || r.Pass() {
-		t.Fatalf("broken finder: %+v", r)
+	if r.ByKind[Finder] != 1 || r.ByKind[Timing] != 1 || r.Patterns() != 2 || !r.Pass() {
+		t.Fatalf("two broken pattern modules: %+v, want a pass", r)
 	}
 }
 
-func TestVerifyFailsOnBrokenTiming(t *testing.T) {
+func TestVerifyFailsOnThreePatternModules(t *testing.T) {
 	c := repoCode(t)
 	im := c.Image(20, QuietZone)
+	paint(im, 20, 3, 3, false)
 	paint(im, 20, 10, 6, false)
+	paint(im, 20, 7, 1, true) // a light separator module
 	r := Verify(im, c)
-	if r.ByKind[Timing] != 1 || r.Pass() {
-		t.Fatalf("broken timing: %+v", r)
+	if r.ByKind[Separator] != 1 || r.Patterns() != 3 || r.Pass() {
+		t.Fatalf("three broken pattern modules: %+v, want a fail", r)
+	}
+}
+
+// A pattern module just across the threshold, within the margin, is not
+// counted: it is a marginal read, not a wrong one.
+func TestVerifyIgnoresMarginalPatternModule(t *testing.T) {
+	c := repoCode(t)
+	im := c.Image(20, QuietZone)
+	for yy := (QuietZone + 1) * 20; yy < (QuietZone+2)*20; yy++ {
+		for xx := (QuietZone + 1) * 20; xx < (QuietZone+2)*20; xx++ {
+			im.SetGray(xx, yy, color.Gray{Y: 120}) // light ring of the finder, 3% under the middle
+		}
+	}
+	if r := Verify(im, c); r.Wrong != 0 || r.Patterns() != 0 {
+		t.Fatalf("marginal finder module: %+v, want nothing wrong", r)
 	}
 }
 

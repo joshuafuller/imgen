@@ -12,6 +12,15 @@ import (
 // for the uneven spread of errors and for cameras that read worse than us.
 const MaxWrongPercent = 3
 
+// MaxPatternWrong is how many finder, separator and timing modules may be
+// clearly wrong in a picture that passes. Phones read past one or two.
+const MaxPatternWrong = 2
+
+// patternMargin is how far, as a share of the dark-light contrast, a pattern
+// module must read on the wrong side to count as wrong. A module just across
+// a threshold is a marginal read, which phones still get right.
+const patternMargin = 0.08
+
 // Grid places the modules on a picture: the top-left corner of module (0, 0)
 // and the module size, in pixels.
 type Grid struct {
@@ -26,17 +35,24 @@ type Report struct {
 	Grid    Grid   // where the modules were found
 }
 
+// Patterns returns the wrong modules of the finder, separator and timing
+// patterns.
+func (r Report) Patterns() int {
+	return r.ByKind[Finder] + r.ByKind[Separator] + r.ByKind[Timing]
+}
+
 // Pass reports whether the picture should scan: under MaxWrongPercent of
-// the modules wrong, and every finder and timing module right.
+// the modules wrong, and at most MaxPatternWrong pattern modules wrong.
 func (r Report) Pass() bool {
-	return r.Modules > 0 && r.Wrong*100 < r.Modules*MaxWrongPercent && r.ByKind[Finder] == 0 && r.ByKind[Timing] == 0
+	return r.Modules > 0 && r.Wrong*100 < r.Modules*MaxWrongPercent && r.Patterns() <= MaxPatternWrong
 }
 
 // Verify finds the module grid of c on im and counts the modules whose color
-// differs from c. A module reads against the mean of its neighbors; finder,
-// separator and timing modules must also read right against one global
-// threshold. It expects the code in the layout of GuidePNG: about
-// centered, with a quiet zone of about four modules, at any scale.
+// differs from c. A module reads against the mean of its neighbors. A
+// finder, separator or timing module is wrong only when it reads wrong by
+// more than patternMargin against its neighbors or against the global
+// threshold. It expects the code in the layout of GuidePNG: about centered,
+// with a quiet zone of about four modules, at any scale.
 func Verify(im image.Image, c *Code) Report {
 	l := newLum(im)
 	n := c.Size * c.Size
@@ -51,14 +67,16 @@ func Verify(im image.Image, c *Code) Report {
 			samples[y*c.Size+x] = l.module(g, x, y, readBox)
 		}
 	}
-	t, global := thresholds(samples, c.Size), otsu(samples)
+	t := thresholds(samples, c.Size)
+	mid, contrast := split(samples)
+	margin := patternMargin * contrast
 	r := Report{Modules: n, Grid: g}
 	for y := range c.Size {
 		for x := range c.Size {
-			v, dark := samples[y*c.Size+x], c.Dark(x, y)
-			wrong := (v < t[y*c.Size+x]) != dark
-			if strictKind(c.Kind(x, y)) {
-				wrong = wrong || (v < global) != dark
+			v, dark, local := samples[y*c.Size+x], c.Dark(x, y), t[y*c.Size+x]
+			wrong := (v < local) != dark
+			if pattern(c.Kind(x, y)) {
+				wrong = wrongBy(v, local, margin, dark) || wrongBy(v, mid, margin, dark)
 			}
 			if wrong {
 				r.Wrong++
@@ -69,11 +87,20 @@ func Verify(im image.Image, c *Code) Report {
 	return r
 }
 
-// strictKind reports whether a module kind must also read right against
-// the global threshold. Decoders find the code by the finder and timing
-// patterns, and a finder ring painted a mid tone fools the local threshold
-// in a dark area but loses the finder for a strict decoder.
-func strictKind(k Kind) bool { return k == Finder || k == Separator || k == Timing }
+// pattern reports whether a module kind belongs to the patterns decoders
+// find the code by. These also read against the global threshold: a finder
+// ring painted a mid tone fools the local threshold in a dark area, but a
+// decoder loses the finder.
+func pattern(k Kind) bool { return k == Finder || k == Separator || k == Timing }
+
+// wrongBy reports whether a sample v of a module reads wrong against the
+// threshold th by more than margin.
+func wrongBy(v, th, margin float64, dark bool) bool {
+	if dark {
+		return v > th+margin
+	}
+	return v < th-margin
+}
 
 // lum is a luminance image as a summed-area table, so the mean of any box
 // costs four lookups.
@@ -190,7 +217,7 @@ func (l *lum) search(c *Code, s0 float64) Grid {
 
 // Local threshold: the mean of the samples within threshRadius modules, as
 // phone decoders binarize by area. A flat window (range under flatRange)
-// has no edge to split, so it takes the global Otsu threshold.
+// has no edge to split, so it takes the global threshold of split.
 const (
 	threshRadius = 3
 	flatRange    = 24
@@ -199,7 +226,7 @@ const (
 // thresholds returns the dark/light threshold of each module of a size x
 // size grid of samples.
 func thresholds(v []float64, size int) []float64 {
-	global := otsu(v) // for flat windows
+	global, _ := split(v) // for flat windows
 	out := make([]float64, len(v))
 	for y := range size {
 		for x := range size {
@@ -217,6 +244,26 @@ func thresholds(v []float64, size int) []float64 {
 		}
 	}
 	return out
+}
+
+// split returns the global threshold, the middle between the means of the
+// two Otsu classes of the samples, and the contrast between those means.
+func split(v []float64) (mid, contrast float64) {
+	t := otsu(v)
+	var sd, sl float64
+	var nd, nl int
+	for _, s := range v {
+		if s < t {
+			sd, nd = sd+s, nd+1
+		} else {
+			sl, nl = sl+s, nl+1
+		}
+	}
+	if nd == 0 || nl == 0 {
+		return t, 0
+	}
+	d, l := sd/float64(nd), sl/float64(nl)
+	return (d + l) / 2, l - d
 }
 
 // otsu returns the threshold that best splits the samples into two classes.
