@@ -134,6 +134,21 @@ imgen gen -r 2K -a 16:9 --name plate \
 </td>
 <td><img src="docs/assets/uc-labeled.jpg" alt="Isometric city block with cafe, park and bus stop labels added in code"></td>
 </tr>
+<tr>
+<td valign="top">
+
+### ⚔️ Animated game characters
+
+```sh
+imgen gen -p openai -b transparent -f png --name hero \
+  "pixel-art knight, side view, full body, no background"
+# then animate it: examples/sprite/ makes a
+# seamless walk loop, sheet and atlas
+```
+
+</td>
+<td><img src="examples/sprite/knight-walk.gif" alt="Pixel-art knight walking in a seamless loop, made from one imgen image and a video model"></td>
+</tr>
 </table>
 
 ### 🌌 Ultrawide wallpapers
