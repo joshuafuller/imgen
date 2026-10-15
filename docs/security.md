@@ -180,7 +180,7 @@ make check
 
 ## Review history
 
-The v0.3 and v0.4 work had a series of independent read-only security reviews on 2026-10-14. Each pass checked the fixes for the previous one under the threat model above.
+The v0.3 and v0.4 work had a series of independent read-only security reviews on 2026-10-14, and v0.5 had two more on 2026-10-15 (below the table). Each pass checked the fixes for the previous one under the threat model above.
 
 | Report | Outcome |
 |---|---|
@@ -194,3 +194,10 @@ The v0.3 and v0.4 work had a series of independent read-only security reviews on
 | [Pass 8](security/reviews/daybreak-2026-10-14-pass8.md) | Foreign media fixed. Not passed: SVG Tiny `<handler>` scripting and active SVG in `data:` URIs. |
 | [Pass 9](security/reviews/daybreak-2026-10-14-pass9.md) | Scripting, data URI, animation and namespace issues fixed. Not passed: CSS image functions with quoted URLs. |
 | [Pass 10](security/reviews/daybreak-2026-10-14-pass10.md) | **Pass** for the SVG boundary. Pass-9 blockers closed, no new bypass found. Scope was SVG validation only, and the verdict rests on source review, not a fresh test run. |
+
+**v0.5 reviews (2026-10-15).** Two passes covered the v0.5 additions: pipes, terminal pictures, interactive mode, live painting and `imgen qr`. Both ended "No-go". Every finding was then fixed in code, with a regression test for each. **No third review ran after those fixes**, so treat them as fixed but not independently re-checked.
+
+| Report | Findings | Fixed in |
+|---|---|---|
+| [v0.5 pass 1](security/reviews/daybreak-2026-10-15-v05-pass1.md) | Streaming could send a second paid request; provider text could carry terminal control codes; raw image bytes reached terminal decoders; the terminal query could race the interactive key reader; low-contrast QR codes could pass; `/dev/null` was treated as a terminal | v0.5.0 (`54acf2a`, `42351cc`, `7980a1f`, `74528d3`, `324d5b7`, `734b7c6`) |
+| [v0.5 pass 2](security/reviews/daybreak-2026-10-15-v05-pass2.md) | Confirmed 4 of 6 fixed. Open: a paid request could still be retried after a 429 or a stream refusal; plain previews could still send the terminal query | Terminal query: v0.5.0 (`e77eb37`). Paid replay: v0.5.1 (`2a08f76`, `a46f9f0`) |
