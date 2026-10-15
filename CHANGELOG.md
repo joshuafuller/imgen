@@ -8,6 +8,30 @@ Every entry links to the commit that made the change.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-15
+
+`IMGEN_BUDGET` now holds a call's top price before the call and counts the tokens that the API reports after it, so a large OpenAI image or an edit can no longer go past the limit unseen.
+
+**Full changelog:** [v0.5.2...v0.5.3](https://github.com/joshuafuller/imgen/compare/v0.5.2...v0.5.3)
+
+### Upgrade notes
+
+- **CLI:** An OpenAI call with no `-q`, `-r` or `-a` now holds about $0.71 on `gpt-image-2` (the dearest size and quality the API can pick), and counts at that if it fails. Set `-q` and `-r` to hold less. ([`8410fc7`](https://github.com/joshuafuller/imgen/commit/8410fc72aaa179f6e9cdef2cff2bfc34730cc651))
+
+### Changed
+
+- **CLI:** Before a paid call, the budget holds its top price: the image at its size and quality, the prompt, each input image and room for the model's text. `--dry-run` shows it. ([`8410fc7`](https://github.com/joshuafuller/imgen/commit/8410fc72aaa179f6e9cdef2cff2bfc34730cc651))
+- **CLI:** After a call on the official OpenAI or Gemini API, the cost line, `--json`, the history and the MCP session count the tokens that the API reports, at the published rates. ([`9e1ce14`](https://github.com/joshuafuller/imgen/commit/9e1ce140553292c9d35839317f1a8c2414d7bccf)) ([`8410fc7`](https://github.com/joshuafuller/imgen/commit/8410fc72aaa179f6e9cdef2cff2bfc34730cc651))
+- **Docs:** The README, the docs, the two examples and the agent skill describe the top price and the reported cost. ([`36070fd`](https://github.com/joshuafuller/imgen/commit/36070fdf6ae031efb7c18ba8ce175a61e2486aff)) ([`8bdc8bd`](https://github.com/joshuafuller/imgen/commit/8bdc8bdb392040bdb3ef268b63fbcbc77e861558))
+
+### Fixed
+
+- **CLI:** OpenAI sizes other than the three standard ones were priced as 1024x1024, and edits did not count their input images. Prices now follow OpenAI's token formula and the published rates. ([`8410fc7`](https://github.com/joshuafuller/imgen/commit/8410fc72aaa179f6e9cdef2cff2bfc34730cc651))
+
+### Security
+
+- **Providers:** imgen ignores the token counts from a custom endpoint, so that server cannot lower the spend that the budget sees. ([`9e1ce14`](https://github.com/joshuafuller/imgen/commit/9e1ce140553292c9d35839317f1a8c2414d7bccf))
+
 ## [0.5.2] - 2026-10-15
 
 A rate limit no longer ends a paid run on the official APIs: imgen tries again, and a refused try costs nothing. Also two new examples and an updated agent skill.
@@ -130,7 +154,8 @@ server for AI agents. Every documented example is run against the real APIs befo
 - **MCP:** Only API providers by default, with caps on images, calls, spend, disk, request size and time; provider text is returned as untrusted data. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 - **Docs:** `SECURITY.md` and `docs/security.md` describe the threat model; ten independent review reports are in `docs/security/reviews/`. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 
-[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/joshuafuller/imgen/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/joshuafuller/imgen/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/joshuafuller/imgen/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/joshuafuller/imgen/compare/v0.4.0...v0.5.0
