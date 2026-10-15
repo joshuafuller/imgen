@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <b>One CLI for every image model.</b> Gemini, OpenAI, Codex, Ideogram, Recraft, FLUX, Replicate, fal, Higgsfield, your local GPU, or any script.<br>
+  <b>One safe, scriptable CLI for every image model.</b> Gemini, OpenAI, Codex, Ideogram, Recraft, FLUX, Replicate, fal, Higgsfield, your local GPU, or any script.<br>
   A single Go binary with one dependency. MCP server built in.
 </p>
 
@@ -26,12 +26,12 @@ imgen gen -r 4K -a 16:9 "a lone lighthouse at dusk, no text"
 
 ## Why imgen
 
+- **Safe with your money.** imgen never sends a paid request twice if it may have run. It tries again only when the official API refuses a request with a rate limit (HTTP 429), and it shows each try. `IMGEN_BUDGET` caps your daily spend, and imgen checks it before every paid call, also across parallel jobs. `--dry-run` shows the cost first.
+- **Safe with your keys and files.** Keys stay in a private file that imgen reads itself, so they never enter your shell or other programs. Files are never overwritten, every response is checked, and the MCP server works only inside one folder. See [Security](docs/security.md).
+- **Made for scripts and agents.** Paths on stdout, `--json` results, stable exit codes, pipes with `-i -` and `-o -`, a Claude Code skill, and `imgen mcp`.
 - **New models work on day one.** `imgen models` asks each API what exists now, `-m latest` picks the newest, and any model ID passes straight through.
 - **Every knob.** 4K on Gemini; exact sizes, quality and real transparency on OpenAI; anything else with `--set key=value`.
-- **Bring your own backend.** A local OpenAI-compatible server is three lines of config. ComfyUI or a diffusers script is a small JSON plugin in any language.
-- **Use your ChatGPT plan.** The `codex` provider makes images through your Codex login. No API key, no API bill.
-- **Made for scripts and agents.** Paths on stdout, `--json` results, stable exit codes, a Claude Code skill, and `imgen mcp`.
-- **Safe defaults.** Keys stay in a private file, files are never overwritten, spend can be capped per day, and every response is validated.
+- **Your backend, or your ChatGPT plan.** A local OpenAI-compatible server is three lines of config, and ComfyUI or a diffusers script is a small JSON plugin in any language. The `codex` provider makes images through your Codex login, with no API key and no API bill.
 
 ## Quick start
 
@@ -161,7 +161,7 @@ For a 5120x1440 (32:9) grain-free desktop, use the built-in profile: `imgen gen 
 
 <p align="center"><img src="docs/assets/uc-wallpaper.jpg" alt="Ultrawide wallpaper of an aurora over a frozen fjord" width="100%"></p>
 
-Every image in this README was made with imgen. More worked examples are in [Recipes](docs/recipes.md).
+Every image in this README was made with imgen. For complete projects, each with a script and sample outputs, see the [examples](examples/README.md): app icons, a brand kit, social cards, thumbnails, product photos, illustrations, wallpapers, tabletop tokens, QR posters, game assets and sprites. Short recipes are in [Recipes](docs/recipes.md).
 
 ## Providers
 
@@ -195,6 +195,7 @@ Gemini, OpenAI and Codex are tested with real images. The other API providers ar
 | [Providers](docs/providers.md) | Keys, models, sizes and support per backend |
 | [Configuration](docs/configuration.md) | Rules file, styles, profiles, budget, history and cache |
 | [Recipes](docs/recipes.md) | Icons, product shots, diagrams, wallpapers, batches |
+| [Examples](examples/README.md) | Complete projects with scripts: icon sets, brand kit, social cards, product photos, sprites and more |
 | [Interop recipes](docs/interop.md) | Pipes, ImageMagick, ffmpeg, jq, xargs, fzf, history |
 | [MCP server](docs/mcp.md) | Agent setup, tools and safety policy |
 | [Local models](docs/local-models.md) | ComfyUI and Qwen-Image-2.1 on your own GPU |
