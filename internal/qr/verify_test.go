@@ -200,3 +200,26 @@ func TestVerifyUnevenLight(t *testing.T) {
 		t.Fatalf("uneven light: %+v", r)
 	}
 }
+
+// A finder whose light ring is painted a deep green reads right against the
+// dark area around it, but strict decoders lose the finder. Function
+// patterns must also read right against the global threshold.
+func TestVerifyDarkFinderRing(t *testing.T) {
+	c := repoCode(t)
+	im := c.Image(20, QuietZone)
+	for y := range 7 {
+		for x := range 7 {
+			if !c.Dark(x, y) {
+				for yy := (QuietZone + y) * 20; yy < (QuietZone+y+1)*20; yy++ {
+					for xx := (QuietZone + x) * 20; xx < (QuietZone+x+1)*20; xx++ {
+						im.SetGray(xx, yy, color.Gray{Y: 70})
+					}
+				}
+			}
+		}
+	}
+	r := Verify(im, c)
+	if r.ByKind[Finder] != 16 || r.Pass() {
+		t.Fatalf("dark finder ring: %+v, want 16 finder modules wrong and a fail", r)
+	}
+}

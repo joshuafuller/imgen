@@ -33,7 +33,9 @@ func (r Report) Pass() bool {
 }
 
 // Verify finds the module grid of c on im and counts the modules whose color
-// differs from c. It expects the code in the layout of GuidePNG: about
+// differs from c. A module reads against the mean of its neighbors; finder,
+// separator and timing modules must also read right against one global
+// threshold. It expects the code in the layout of GuidePNG: about
 // centered, with a quiet zone of about four modules, at any scale.
 func Verify(im image.Image, c *Code) Report {
 	l := newLum(im)
@@ -49,11 +51,16 @@ func Verify(im image.Image, c *Code) Report {
 			samples[y*c.Size+x] = l.module(g, x, y, readBox)
 		}
 	}
-	t := thresholds(samples, c.Size)
+	t, global := thresholds(samples, c.Size), otsu(samples)
 	r := Report{Modules: n, Grid: g}
 	for y := range c.Size {
 		for x := range c.Size {
-			if (samples[y*c.Size+x] < t[y*c.Size+x]) != c.Dark(x, y) {
+			v, dark := samples[y*c.Size+x], c.Dark(x, y)
+			wrong := (v < t[y*c.Size+x]) != dark
+			if strictKind(c.Kind(x, y)) {
+				wrong = wrong || (v < global) != dark
+			}
+			if wrong {
 				r.Wrong++
 				r.ByKind[c.Kind(x, y)]++
 			}
@@ -61,6 +68,12 @@ func Verify(im image.Image, c *Code) Report {
 	}
 	return r
 }
+
+// strictKind reports whether a module kind must also read right against
+// the global threshold. Decoders find the code by the finder and timing
+// patterns, and a finder ring painted a mid tone fools the local threshold
+// in a dark area but loses the finder for a strict decoder.
+func strictKind(k Kind) bool { return k == Finder || k == Separator || k == Timing }
 
 // lum is a luminance image as a summed-area table, so the mean of any box
 // costs four lookups.
@@ -186,7 +199,7 @@ const (
 // thresholds returns the dark/light threshold of each module of a size x
 // size grid of samples.
 func thresholds(v []float64, size int) []float64 {
-	global := otsu(v)
+	global := otsu(v) // for flat windows
 	out := make([]float64, len(v))
 	for y := range size {
 		for x := range size {
