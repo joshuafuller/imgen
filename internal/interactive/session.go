@@ -24,6 +24,8 @@ type Terminal interface {
 	Raw() error
 	// Restore returns to the mode saved by Raw. It must be safe to call twice.
 	Restore() error
+	// Width is the number of columns; 0 when unknown.
+	Width() int
 }
 
 // Result is what one gen or edit call made.

@@ -96,6 +96,7 @@ Each call goes through the same code as `imgen gen` and `imgen edit`. Thus all o
 - `IMGEN_BUDGET` stops a call before it is sent if the call goes over the daily cap. The session shows the error and continues. The session never uses `--force`.
 - Each call goes into the history with its arguments and the prompt, so `imgen rerun` can replay it. The redaction rules and `IMGEN_HISTORY` apply.
 - imgen validates each returned image before it saves the image.
+- A profile with `"cache": true` (use it with `--profile` or `/profile`) turns on the cache. Then an identical request uses the cached result and costs nothing.
 
 ## Terminal safety
 

@@ -15,6 +15,7 @@ type fakeConsole struct{ raw, restored int }
 
 func (f *fakeConsole) Raw() error     { f.raw++; return nil }
 func (f *fakeConsole) Restore() error { f.restored++; return nil }
+func (f *fakeConsole) Width() int     { return 80 }
 
 // withConsole makes the harness look like a terminal that types keys.
 func withConsole(h *harness, keys string) *fakeConsole {

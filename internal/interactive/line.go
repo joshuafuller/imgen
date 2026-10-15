@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // lineEnd says how readLine ended.
@@ -19,6 +20,7 @@ const (
 type editor struct {
 	buf    []rune
 	pos    int
+	off    int    // first rune shown, when the line is wider than the terminal
 	hist   int    // index into the prompt history; len means the draft
 	draft  []rune // the line as typed before history recall
 	ctrlCs int    // Ctrl-C presses in a row
@@ -118,13 +120,19 @@ func (s *session) recall(ed *editor, up bool) {
 	ed.pos = len(ed.buf)
 }
 
-// redraw rewrites the prompt line and puts the cursor in place.
+// redraw rewrites the prompt line and puts the cursor in place. A line
+// wider than the terminal scrolls sideways, so it never wraps: a wrapped
+// line cannot be cleared or redrawn in place.
 func (s *session) redraw(ed *editor) {
+	avail := max(s.width()-utf8.RuneCountInString(promptText)-1, 1)
+	ed.off = min(ed.off, max(len(ed.buf)-avail, 0))
+	ed.off = min(max(ed.off, ed.pos-avail), ed.pos)
+	end := min(ed.off+avail, len(ed.buf))
 	var b strings.Builder
 	b.WriteString("\r\x1b[2K")
 	b.WriteString(s.st.Bold(promptText))
-	b.WriteString(string(ed.buf))
-	if back := len(ed.buf) - ed.pos; back > 0 {
+	b.WriteString(string(ed.buf[ed.off:end]))
+	if back := end - ed.pos; back > 0 {
 		fmt.Fprintf(&b, "\x1b[%dD", back)
 	}
 	fmt.Fprint(s.out, b.String())
@@ -177,6 +185,14 @@ func (s *session) argWords(cmd string) []string {
 		return s.cfg.Profiles
 	}
 	return nil
+}
+
+// width is the terminal width, 80 when unknown.
+func (s *session) width() int {
+	if w := s.cfg.Term.Width(); w > 0 {
+		return w
+	}
+	return 80
 }
 
 func commonPrefix(ws []string) string {

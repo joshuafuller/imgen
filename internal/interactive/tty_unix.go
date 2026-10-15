@@ -74,6 +74,15 @@ func (t *tty) Raw() error {
 	return nil
 }
 
+// Width asks the kernel for the window size; 0 when it cannot tell.
+func (t *tty) Width() int {
+	var ws struct{ Row, Col, X, Y uint16 }
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, t.fd, syscall.TIOCGWINSZ, uintptr(unsafe.Pointer(&ws))); e != 0 { // #nosec G103 -- winsize ioctl needs the struct address
+		return 0
+	}
+	return int(ws.Col)
+}
+
 // Restore puts back the mode Raw saved. A second call does nothing.
 func (t *tty) Restore() error {
 	t.mu.Lock()

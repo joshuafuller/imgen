@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -24,6 +25,14 @@ type fakeTerm struct {
 	raws     int
 	restores int
 	rawErr   error
+	width    int
+}
+
+func (f *fakeTerm) Width() int {
+	if f.width == 0 {
+		return 80
+	}
+	return f.width
 }
 
 func (f *fakeTerm) Raw() error {
@@ -492,5 +501,27 @@ func TestUnknownCommand(t *testing.T) {
 	r.mustRun(t, "/frob\r/quit\r")
 	if !strings.Contains(r.out.String(), "unknown command /frob") {
 		t.Fatalf("output:\n%s", r.out.String())
+	}
+}
+
+var ansi = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+
+func TestLongLineScrollsWithinWidth(t *testing.T) {
+	r := newRig(t)
+	r.term.width = 24
+	long := strings.Repeat("abcdefghij", 5)
+	// Type it, go left 30, insert X, then submit.
+	r.mustRun(t, long+strings.Repeat("\x1b[D", 30)+"X\r/quit\r")
+	want := long[:20] + "X" + long[20:]
+	if got := r.runner.got()[0].prompt; got != want {
+		t.Fatalf("prompt = %q, want %q", got, want)
+	}
+	for _, line := range strings.FieldsFunc(r.out.String(), func(c rune) bool { return c == '\r' || c == '\n' }) {
+		if !strings.Contains(line, "imgen ›") {
+			continue
+		}
+		if w := len([]rune(ansi.ReplaceAllString(line, ""))); w >= 24 {
+			t.Fatalf("redraw is %d columns wide, terminal is 24: %q", w, line)
+		}
 	}
 }

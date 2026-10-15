@@ -95,3 +95,18 @@ func TestOpenRefusesNonTerminals(t *testing.T) {
 		t.Fatalf("pty: %v", err)
 	}
 }
+
+func TestWidthOnPTY(t *testing.T) {
+	_, s := openPTY(t)
+	ws := struct{ Row, Col, X, Y uint16 }{Row: 24, Col: 97}
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, s.Fd(), syscall.TIOCSWINSZ, uintptr(unsafe.Pointer(&ws))); e != 0 {
+		t.Skipf("set winsize: %v", e)
+	}
+	tm, err := Open(s, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := tm.Width(); w != 97 {
+		t.Fatalf("Width = %d, want 97", w)
+	}
+}
