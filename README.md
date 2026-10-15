@@ -5,6 +5,16 @@
 <h1 align="center">imgen</h1>
 
 <p align="center">
+  <a href="https://github.com/joshuafuller/imgen/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/joshuafuller/imgen?sort=semver&color=2b6cb0"></a>
+  <a href="go.mod"><img alt="Go 1.27" src="https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
+  <a href="docs/providers.md"><img alt="9 providers plus local models" src="https://img.shields.io/badge/providers-9%20%2B%20local-8a2be2"></a>
+  <a href="docs/mcp.md"><img alt="MCP server built in" src="https://img.shields.io/badge/MCP-server-black"></a>
+  <a href="docs/security.md"><img alt="Security reviewed" src="https://img.shields.io/badge/security-reviewed-success"></a>
+  <a href="https://github.com/joshuafuller/imgen/releases/latest"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-linux%20%7C%20macOS%20%7C%20windows-lightgrey"></a>
+</p>
+
+<p align="center">
   <b>One CLI for every image model.</b> Gemini, OpenAI, Codex, Ideogram, Recraft, FLUX, Replicate, fal, Higgsfield, your local GPU, or any script.<br>
   A single Go binary with one dependency. MCP server built in.
 </p>

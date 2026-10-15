@@ -200,3 +200,9 @@ imgen gen --json "a red cube" | jq -r '.files[0].path'   # structured result
 ```
 
 The full output contract is in the [CLI reference](cli.md#output-contract).
+
+## Animate a game character
+
+Turn one character image into a seamless sprite loop (walk, idle, attack). imgen makes the character, Veo animates it on a green screen, and a free script keys, loops and exports it as pixel art or smooth frames, with a sprite sheet and a TexturePacker-style atlas. The full walkthrough and scripts are in [`examples/sprite/`](../examples/sprite/).
+
+![A knight walk loop made with imgen and Veo](../examples/sprite/knight-walk.gif)

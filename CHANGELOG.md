@@ -8,6 +8,11 @@ Every entry links to the commit that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- **Docs:** `examples/sprite/`: animate a game character into a seamless sprite loop, in pixel-art or smooth style, with a sprite sheet and a TexturePacker-style atlas.
+- **Docs:** README badges.
+
 ## [0.5.0] - 2026-10-15
 
 Terminal-native imgen: pipes, pictures right in the terminal, an interactive mode, live
