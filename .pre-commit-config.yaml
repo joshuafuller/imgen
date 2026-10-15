@@ -6,6 +6,13 @@ repos:
         stages: [pre-commit]
   - repo: local
     hooks:
+      - id: check-history
+        name: refuse commits from the rewritten pre-release history
+        entry: scripts/check-history.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
       - id: make-check
         name: make check (full security + quality gate)
         entry: make check
