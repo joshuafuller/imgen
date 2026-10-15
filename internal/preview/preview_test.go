@@ -428,6 +428,14 @@ func TestIsTTYOnBuffer(t *testing.T) {
 	if defaultIsTTY(f) {
 		t.Fatal("regular file is not a TTY")
 	}
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	if defaultIsTTY(null) {
+		t.Fatal("/dev/null is a character device, not a TTY")
+	}
 }
 
 const hostile = "a&calc.exe|x\"';$(rm -rf ~)`.png"

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joshuafuller/imgen/internal/subenv"
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 // Injection points so tests never touch a real terminal or notifier.
@@ -42,11 +43,7 @@ var frames = []string{"|", "/", "-", `\`}
 
 func defaultIsTTY(w io.Writer) bool {
 	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return ok && term.IsTerminal(f)
 }
 
 func detectWSL() bool {

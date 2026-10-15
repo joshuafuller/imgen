@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -49,6 +50,18 @@ func TestStartNoopWhenNotTTY(t *testing.T) {
 	stop()
 	if b.String() != "" {
 		t.Fatalf("wrote %q", b.String())
+	}
+}
+
+// /dev/null is a character device, not a terminal: no spinner for it.
+func TestDefaultIsTTYDevNull(t *testing.T) {
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = null.Close() }()
+	if defaultIsTTY(null) || defaultIsTTY(&bytes.Buffer{}) {
+		t.Fatal("/dev/null and a buffer are not terminals")
 	}
 }
 

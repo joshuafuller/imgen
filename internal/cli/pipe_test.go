@@ -81,6 +81,22 @@ func TestGenOutputStdoutRefusesTerminal(t *testing.T) {
 	}
 }
 
+// /dev/null is a character device but not a terminal, so -o - may write to it.
+func TestGenOutputStdoutToDevNull(t *testing.T) {
+	h, pf := pngHarness(t, 4, 4, color.White)
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = null.Close() }()
+	if c := Run([]string{"gen", "-o", "-", "a cat"}, null, &h.errb, h.env); c != 0 {
+		t.Fatalf("code %d: %s", c, h.errb.String())
+	}
+	if len(pf.got) != 1 {
+		t.Fatalf("calls %d", len(pf.got))
+	}
+}
+
 func TestGenOutputStdoutNeedsOneImage(t *testing.T) {
 	h, pf := pngHarness(t, 4, 4, color.White)
 	pf.nimg = 2

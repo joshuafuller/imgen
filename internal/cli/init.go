@@ -13,6 +13,7 @@ import (
 
 	"github.com/joshuafuller/imgen/internal/envfile"
 	"github.com/joshuafuller/imgen/internal/subenv"
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 const initHelp = `usage: imgen init
@@ -162,7 +163,7 @@ func muteEcho(ctx context.Context, r io.Reader) func() {
 	if !ok {
 		return func() {}
 	}
-	if st, err := f.Stat(); err != nil || st.Mode()&os.ModeCharDevice == 0 {
+	if !term.IsTerminal(f) {
 		return func() {}
 	}
 	set := func(arg string) error {

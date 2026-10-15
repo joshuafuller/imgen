@@ -11,6 +11,7 @@ import (
 	"github.com/joshuafuller/imgen/internal/interactive"
 	"github.com/joshuafuller/imgen/internal/preview"
 	"github.com/joshuafuller/imgen/internal/progress"
+	"github.com/joshuafuller/imgen/internal/term"
 )
 
 // Desktop and network hooks of Env. A nil hook means the real behavior.
@@ -68,11 +69,7 @@ func (e Env) isTerminal(w io.Writer) bool {
 		return e.IsTerminal(w)
 	}
 	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return ok && term.IsTerminal(f)
 }
 
 func (e Env) openFile(path string) error {

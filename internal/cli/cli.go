@@ -66,7 +66,7 @@ type Env struct {
 	Styled func(w io.Writer) bool
 
 	// IsTerminal reports whether a writer is a terminal, so -o - never
-	// writes image bytes to one; nil means a character-device check.
+	// writes image bytes to one; nil means term.IsTerminal.
 	IsTerminal func(w io.Writer) bool
 
 	// Load errors from main. They stop every command but doctor, which
