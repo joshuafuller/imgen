@@ -328,6 +328,10 @@ def dry_json(argv, cwd, env):
         a[a.index("--last")] = "-i"
         a.insert(a.index("-i") + 1, "stub.png")
     a = a[:2] + ["--dry-run", "--json"] + [x for x in a[2:] if x not in ("--dry-run", "--json")]
+    # -i - reads a piped image; price it with the stub image instead.
+    a = ["stub.png" if x == "-" and i > 0 and a[i - 1] in ("-i", "--input") else x for i, x in enumerate(a)]
+    # -o - (image bytes on stdout) cannot combine with --json; price it as a file output.
+    a = [x for i, x in enumerate(a) if not (x == "-" and i > 0 and a[i - 1] in ("-o", "--output")) and not (x in ("-o", "--output") and i + 1 < len(a) and a[i + 1] == "-")]
     p = subprocess.run(a, cwd=cwd, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     objs = []
     for l in p.stdout.splitlines():
