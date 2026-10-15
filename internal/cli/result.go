@@ -37,8 +37,9 @@ type outcome struct {
 	text       string
 	files      []fileOut
 	elapsed    time.Duration
-	cost       float64
+	cost       float64 // the estimate times attempts
 	costKnown  bool
+	attempts   int // times the paid request was sent, when a 429 retry sent it more than once
 	isDry      bool
 	cached     bool
 	prompt     string // final prompt (after --enhance and --style), recorded in history and meta
@@ -76,6 +77,7 @@ type jsonResult struct {
 	ElapsedMS int64       `json:"elapsed_ms"`
 	CostUSD   float64     `json:"cost_usd"`
 	CostKnown bool        `json:"cost_known"`
+	Attempts  int         `json:"attempts,omitempty"`
 	DryRun    bool        `json:"dry_run"`
 	Text      string      `json:"text"`
 	Request   *requestDoc `json:"request,omitempty"`
@@ -85,9 +87,20 @@ type jsonResult struct {
 }
 
 type jsonError struct {
-	Error string `json:"error"`
-	Exit  int    `json:"exit"`
-	Line  int    `json:"line,omitempty"`
+	Error    string `json:"error"`
+	Exit     int    `json:"exit"`
+	Line     int    `json:"line,omitempty"`
+	Attempts int    `json:"attempts,omitempty"`
+}
+
+// newJSONError is the JSON of a failed call. oc, when there is one, gives
+// the attempts of a paid request that was sent more than once.
+func newJSONError(oc *outcome, err error, line int) jsonError {
+	je := jsonError{Error: oneLine(err.Error()), Exit: exitOf(err), Line: line}
+	if oc != nil {
+		je.Attempts = oc.attempts
+	}
+	return je
 }
 
 // MarshalJSON puts "ok":false first, as the contract shows.
@@ -154,7 +167,7 @@ func (oc *outcome) requestDoc() requestDoc {
 func (oc *outcome) jsonResult(line int) jsonResult {
 	res := jsonResult{
 		OK: true, Provider: oc.cfg.Name, Type: oc.cfg.Type, Model: oc.req.Model, APIModel: oc.apiModel,
-		Files: []jsonFile{}, ElapsedMS: oc.elapsed.Milliseconds(), CostKnown: oc.costKnown,
+		Files: []jsonFile{}, ElapsedMS: oc.elapsed.Milliseconds(), CostKnown: oc.costKnown, Attempts: oc.attempts,
 		DryRun: oc.isDry, Text: oc.text, Line: line, Cached: oc.cached, Grid: oc.grid,
 	}
 	if oc.costKnown {
@@ -374,9 +387,9 @@ func (oc *outcome) summary(st term.Style) string {
 	case oc.cached:
 		parts = append(parts, "cached", "$0")
 	case oc.costKnown:
-		parts = append(parts, shortDuration(oc.elapsed), fmt.Sprintf("~$%.3f", oc.cost))
+		parts = append(parts, shortDuration(oc.elapsed), fmt.Sprintf("~$%.3f", oc.cost)+oc.attemptsNote())
 	default:
-		parts = append(parts, shortDuration(oc.elapsed), "cost unknown")
+		parts = append(parts, shortDuration(oc.elapsed), "cost unknown"+oc.attemptsNote())
 	}
 	return st.Green("✓") + " " + strings.Join(parts, " · ")
 }

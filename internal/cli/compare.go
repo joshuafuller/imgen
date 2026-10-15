@@ -206,7 +206,7 @@ func reportCompare(stdout io.Writer, o *genOpts, prompt string, res []compareRes
 
 func compareItem(r compareResult) any {
 	if r.err != nil {
-		return jsonError{Error: oneLine(r.err.Error()), Exit: exitOf(r.err)}
+		return newJSONError(r.oc, r.err, 0)
 	}
 	return r.oc.jsonResult(0)
 }

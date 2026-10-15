@@ -430,8 +430,10 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 	res, err := oc.generate(ctx, p, stop)
 	stop()
 	if err != nil {
+		oc.countAttempts(provider.AttemptsOf(err))
 		return nil, err
 	}
+	oc.countAttempts(res.Attempts)
 	oc.elapsed = env.Now().Sub(start)
 	if !oc.o.tidy {
 		reportResult(info, res, oc.req.Model, oc.elapsed)
@@ -462,6 +464,27 @@ func (oc *outcome) reserveBudget(env Env) error {
 	}
 	oc.hold = hold
 	return nil
+}
+
+// countAttempts books every time the paid request was sent. After a 429 on
+// the provider's official API it may go out again, and each attempt counts
+// at the estimate, so the cost, the history and the budget never count too
+// few. The budget hold stays the one estimate: it is released once the
+// history entry holds the real cost.
+func (oc *outcome) countAttempts(n int) {
+	if n > 1 {
+		oc.attempts = n
+		oc.cost *= float64(n)
+	}
+}
+
+// attemptsNote is " (3 attempts)" when the paid request was sent more than
+// once, else "".
+func (oc *outcome) attemptsNote() string {
+	if oc.attempts > 1 {
+		return fmt.Sprintf(" (%d attempts)", oc.attempts)
+	}
+	return ""
 }
 
 // cacheIdentity names the exact backend: instance name, type and base URL, so
@@ -504,9 +527,9 @@ func (oc *outcome) reportCost(info io.Writer) {
 		return
 	}
 	if oc.costKnown {
-		fmt.Fprintf(info, "cost: ~$%.3f\n", oc.cost)
+		fmt.Fprintf(info, "cost: ~$%.3f%s\n", oc.cost, oc.attemptsNote())
 	} else {
-		fmt.Fprintln(info, "cost: unknown")
+		fmt.Fprintf(info, "cost: unknown%s\n", oc.attemptsNote())
 	}
 }
 
@@ -610,7 +633,7 @@ func finish(env Env, o *genOpts, oc *outcome, info io.Writer) {
 func emitJSON(w io.Writer, oc *outcome, err error, line int) error {
 	var v any
 	if err != nil {
-		v = jsonError{Error: oneLine(err.Error()), Exit: exitOf(err), Line: line}
+		v = newJSONError(oc, err, line)
 	} else {
 		v = oc.jsonResult(line)
 	}
