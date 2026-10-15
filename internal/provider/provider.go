@@ -105,7 +105,8 @@ type Provider interface {
 // while the final one renders. Partials are for display only: the Result
 // holds the final images, as from Generate. A backend calls onPartial from
 // the calling goroutine, only with images that passed the header checks,
-// and may fall back to a plain Generate (no partials) for any request.
+// and may make a plain Generate (no partials) instead for any request, but
+// never a second, plain request after a streamed one.
 type Streamer interface {
 	GenerateStream(ctx context.Context, req Request, onPartial func(Image)) (*Result, error)
 	// StreamPartials is how many partial images GenerateStream asks for

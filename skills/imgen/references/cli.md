@@ -40,7 +40,7 @@ cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i 
 
 Pictures in the terminal: after gen, edit and upscale, the first image shows inline on stderr when it is a terminal with kitty, iTerm2 or sixel graphics. Never with `--json`, `--quiet`, `-o -` or in MCP. `IMGEN_PREVIEW=off|auto|always` sets the default.
 
-Live partial pictures: with OpenAI, gen and edit (and interactive mode) also draw two rough partial images in place while the image renders, when the result will show inline. Display only, never saved. Each partial bills 100 image output tokens; the cost line, history and `IMGEN_BUDGET` include them. `--no-stream` turns it off for a call, `IMGEN_STREAM=off` for everything. Never with `-n` above 1, DALL-E, a custom `base_url`, batch, compare or MCP. A refusal to stream (unverified organization) falls back to the normal call and is remembered until the process ends.
+Live partial pictures: with OpenAI, gen and edit (and interactive mode) also draw two rough partial images in place while the image renders, when the result will show inline. Display only, never saved. Each partial bills 100 image output tokens; the cost line, history and `IMGEN_BUDGET` include them. `--no-stream` turns it off for a call, `IMGEN_STREAM=off` for everything. Never with `-n` above 1, DALL-E, a custom `base_url`, batch, compare or MCP. A refusal to stream (unverified organization) is an error, with no normal call after it; imgen saves it for the key (`openai-stream-refused` in the state folder, a hash only), so running the command again makes the normal call. Delete that file to stream again.
 
 The prompt can sit anywhere among the flags. `-P file` reads it from a file, and a prompt of `-` reads stdin.
 

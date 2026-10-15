@@ -12,6 +12,7 @@ Run `imgen doctor` first. It checks the binary, the key file, each provider inst
 | `HTTP 404` / model not found | wrong or retired model ID | `imgen models -p <provider>`; or `-m latest` |
 | `HTTP 429 ... Rate limited: not retried automatically ...` | rate limit | rate limited; run it again after the given time (imgen never resends a call that can bill); lower `-n`, or switch provider |
 | `... Not retried, because the provider may have billed it` | network error, 408 or 5xx on a call that can bill | imgen did not resend, so no double charge; check the provider's usage page, then rerun or switch provider (streamed OpenAI: rerun or add `--no-stream`) |
+| `openai: this organization cannot stream images; streaming is now off for this key ...` | OpenAI refused the live partial pictures (unverified organization) | rerun: it makes the normal call; to stream again later, delete `~/.local/state/imgen/openai-stream-refused` |
 | blocked / `finishReason: SAFETY` / `blockReason` | safety filter | reword; remove real people, brands, violence; try the other provider |
 | no images, only text | model answered in words | make the prompt an explicit image request ("Generate an image of ..."); Gemini sometimes needs that |
 | `codex: no images generated` | Codex did not call its image tool, or is not logged in | `codex login`; retry; check the stderr tail |

@@ -14,6 +14,8 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -29,13 +31,17 @@ const streamPartials = 2
 var (
 	errStreamEnded = errors.New("openai: the stream ended before the final image")
 	errStreamError = errors.New("stream error")
+	// errStreamRefused: the API refused the stream options, for example for
+	// an organization that is not verified.
+	errStreamRefused = errors.New("openai: this organization cannot stream images")
+	errNoStateDir    = errors.New("no state folder: set XDG_STATE_HOME or HOME")
 )
 
 // GenerateStream is Generate with partial images: the API streams up to
 // two rough pictures as server-sent events, then the final image. Each
 // partial that passes the header checks goes to onPartial; the Result holds
 // only the final image. Requests that cannot stream (n above 1, DALL-E,
-// NoStream) are a plain Generate.
+// NoStream, a key the API refused to stream) are a plain Generate.
 func (c *Client) GenerateStream(ctx context.Context, req provider.Request, onPartial func(provider.Image)) (*provider.Result, error) {
 	return c.generate(ctx, req, onPartial)
 }
@@ -50,37 +56,97 @@ func (c *Client) StreamPartials(req provider.Request) int {
 }
 
 // canStream: one image from a GPT Image model on a client that streams,
-// whose key has not been refused streaming in this process.
+// whose key the API has not refused to stream, in this process or an
+// earlier run.
 func (c *Client) canStream(req provider.Request) bool {
 	if c.NoStream || req.N > 1 || strings.HasPrefix(req.Model, "dall-e") {
 		return false
 	}
-	_, refused := streamRefused.Load(c.refusalKey())
-	return !refused
+	return !c.refused()
 }
 
 // streamRefused holds the endpoints and keys (hashed) that the API refused
-// to stream, for example an organization that is not verified. A refusal
-// lasts for the process, so batch jobs and interactive calls do not repeat
-// the refused request.
+// to stream in this process, so batch jobs and interactive calls do not
+// repeat the refused request. refusedFile in StateDir keeps them for later
+// runs.
 var streamRefused sync.Map
+
+// refusedFile lists the endpoints and keys that the API refused to stream,
+// one refusalKey per line: a hash, never the key or the URL.
+const refusedFile = "openai-stream-refused"
 
 func (c *Client) refusalKey() string {
 	sum := sha256.Sum256([]byte(c.base() + "\x00" + c.APIKey))
 	return hex.EncodeToString(sum[:])
 }
 
+// refused reports whether the API refused to stream for this endpoint and
+// key, in this process or in refusedFile.
+func (c *Client) refused() bool {
+	key := c.refusalKey()
+	if _, ok := streamRefused.Load(key); ok {
+		return true
+	}
+	if c.StateDir == "" {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(c.StateDir, refusedFile)) // #nosec G304 -- fixed file in the user's state folder
+	if err != nil {
+		return false
+	}
+	for line := range strings.Lines(string(b)) {
+		if strings.TrimSpace(line) == key {
+			streamRefused.Store(key, struct{}{})
+			return true
+		}
+	}
+	return false
+}
+
+// refuse remembers that the API refused to stream for this endpoint and
+// key: in this process, and in refusedFile for later runs. One appended
+// line per refusal, so parallel runs do not drop each other's lines.
+func (c *Client) refuse() error {
+	key := c.refusalKey()
+	streamRefused.Store(key, struct{}{})
+	if c.StateDir == "" {
+		return errNoStateDir
+	}
+	if err := os.MkdirAll(c.StateDir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Join(c.StateDir, refusedFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) // #nosec G304 -- fixed file in the user's state folder
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteString(key + "\n"); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// refusal remembers a refusal to stream and returns its error. The refused
+// call stays the only one: the user runs the command again, and that run
+// makes the plain call.
+func (c *Client) refusal() error {
+	if err := c.refuse(); err != nil {
+		return fmt.Errorf("%w, and imgen could not remember it (%w). Run the command again with --no-stream, or set IMGEN_STREAM=off", errStreamRefused, err)
+	}
+	return fmt.Errorf("%w; streaming is now off for this key. Run the command again", errStreamRefused)
+}
+
 // retryHint ends a streamed call's error that a second request could bill
 // twice. The user decides: a retry is a new call, priced and counted.
 const retryHint = "Retry, or use --no-stream"
 
-// stream runs one streamed call. fallback is true only after a 4xx that
-// refuses the stream options themselves (an organization that is not
-// verified): the API ran nothing, so the plain call is the only one billed.
-// Every other failure is the error, never a second call. After a network
-// error, a timeout or a 5xx the API may have run and billed the request,
-// and the budget holds one call; 429 says nothing about streaming either.
-func (c *Client) stream(ctx context.Context, req provider.Request, onPartial func(provider.Image)) (imgs []provider.Image, fallback bool, err error) {
+// stream runs one streamed call. Every failure is the error, never a second
+// call: after a network error, a timeout or a 5xx the API may have run and
+// billed the request, and the budget holds one call. Not even a refusal of
+// the stream options (an organization that is not verified) is followed by
+// the plain call, because the API controls that text too; the refusal is
+// remembered, so the next run makes the plain call.
+func (c *Client) stream(ctx context.Context, req provider.Request, onPartial func(provider.Image)) ([]provider.Image, error) {
 	sreq := req
 	sreq.Extra = maps.Clone(req.Extra)
 	if sreq.Extra == nil {
@@ -90,7 +156,7 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 	sreq.Extra["partial_images"] = streamPartials
 	r, err := c.newRequest(ctx, sreq)()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	r.Header.Set("Accept", "text/event-stream")
 	// One attempt, not httpx.Send. With no Idempotency-Key header, net/http
@@ -98,41 +164,42 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 	resp, err := c.httpc().Do(r)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, false, fmt.Errorf("openai: request: %w", ctx.Err())
+			return nil, fmt.Errorf("openai: request: %w", ctx.Err())
 		}
-		return nil, false, fmt.Errorf("openai: request: %w. %s", err, retryHint)
+		return nil, fmt.Errorf("openai: request: %w. %s", err, retryHint)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	maxBytes := c.retryPolicy(true).MaxBytes
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, httpx.DefaultPolicy().MaxBytes))
-		serr := statusError(resp.StatusCode, body)
-		// Checked first: "stream timeout" (408) or a 429 about streaming
-		// requests is not a refusal to stream.
-		if resp.StatusCode == http.StatusTooManyRequests {
-			return nil, false, fmt.Errorf("%w. %s", serr, httpx.RateHint(resp.Header.Get("Retry-After")))
-		}
-		if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= 500 {
-			return nil, false, fmt.Errorf("%w. %s", serr, retryHint)
-		}
-		if resp.StatusCode >= 400 && refusesStream(serr) {
-			streamRefused.Store(c.refusalKey(), struct{}{})
-			return nil, true, nil
-		}
-		return nil, false, serr
+		return nil, c.streamStatusError(resp, body)
 	}
+	maxBytes := c.retryPolicy(true).MaxBytes
 	format := mimeFor(req.Format)
 	if mt, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); mt != "text/event-stream" {
 		// The server ignored stream and sent a plain ImagesResponse.
 		body, err := readCapped(resp.Body, maxBytes)
 		if err != nil {
-			return nil, false, fmt.Errorf("openai: request: %w", err)
+			return nil, fmt.Errorf("openai: request: %w", err)
 		}
-		imgs, err := c.parseImages(ctx, body, format)
-		return imgs, false, err
+		return c.parseImages(ctx, body, format)
 	}
-	imgs, err = c.readEvents(ctx, resp.Body, maxBytes, format, onPartial)
-	return imgs, false, err
+	return c.readEvents(ctx, resp.Body, maxBytes, format, onPartial)
+}
+
+// streamStatusError is the error of a streamed call's non-2xx answer.
+// Checked first: "stream timeout" (408) or a 429 about streaming requests
+// is not a refusal to stream.
+func (c *Client) streamStatusError(resp *http.Response, body []byte) error {
+	serr := statusError(resp.StatusCode, body)
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return fmt.Errorf("%w. %s", serr, httpx.RateHint(resp.Header.Get("Retry-After")))
+	case resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= 500:
+		return fmt.Errorf("%w. %s", serr, retryHint)
+	case resp.StatusCode >= 400 && refusesStream(serr):
+		return c.refusal()
+	}
+	return serr
 }
 
 // streamWords finds an API error about the stream options themselves

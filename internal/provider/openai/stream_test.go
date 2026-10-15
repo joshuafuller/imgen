@@ -17,7 +17,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -377,18 +381,19 @@ func TestStreamFailureNoSecondCall(t *testing.T) {
 	}
 }
 
-// An explicit refusal to stream falls back to the plain call: the API ran
-// nothing for the refused request, so only the plain call is billed.
-func TestStreamRefusalFallsBack(t *testing.T) {
-	t.Cleanup(streamRefused.Clear)
-	final := pngOf(t, 4, 4)
-	var calls atomic.Int32
+// refusingServer refuses every streamed call as an unverified organization
+// does, and answers a plain call with final. It records whether each call
+// streamed.
+func refusingServer(t *testing.T, final []byte) (*httptest.Server, func() []bool) {
+	t.Helper()
+	var mu sync.Mutex
 	var streamed []bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
 		streamed = append(streamed, body["stream"] == true)
+		mu.Unlock()
 		if body["stream"] == true {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"error":{"message":"Your organization must be verified to stream this model."}}`)
@@ -396,19 +401,145 @@ func TestStreamRefusalFallsBack(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": b64(final)}}})
 	}))
-	defer srv.Close()
-	c := newTestClient(srv)
-	c.Retry = fastRetry()
-	_, onPartial := collectPartials()
-	res, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
-	if err != nil || len(res.Images) != 1 || !bytes.Equal(res.Images[0].Data, final) {
-		t.Fatalf("res %+v err %v", res, err)
+	t.Cleanup(srv.Close)
+	return srv, func() []bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(streamed)
 	}
-	if calls.Load() != 2 || !streamed[0] || streamed[1] {
-		t.Errorf("calls %d streamed %v", calls.Load(), streamed)
+}
+
+// A refusal to stream is the error, with no plain call after it: the
+// provider controls the refusal text, so it does not prove that the API ran
+// nothing. The refusal is saved in StateDir, so the next run (a new process,
+// with nothing in memory) makes the plain call from the start.
+func TestStreamRefusalNoPlainCall(t *testing.T) {
+	t.Cleanup(streamRefused.Clear)
+	final := pngOf(t, 4, 4)
+	srv, streamed := refusingServer(t, final)
+	dir := t.TempDir()
+	c := newTestClient(srv)
+	c.Retry, c.StateDir = fastRetry(), dir
+	_, onPartial := collectPartials()
+	_, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
+	const want = "openai: this organization cannot stream images; streaming is now off for this key. Run the command again"
+	if !errors.Is(err, errStreamRefused) || err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+	if got := streamed(); !slices.Equal(got, []bool{true}) {
+		t.Fatalf("calls %v, want one streamed call", got)
 	}
 	if n := c.StreamPartials(provider.Request{Prompt: "x"}); n != 0 {
-		t.Errorf("refusal not remembered: StreamPartials %d", n)
+		t.Errorf("refusal not remembered in the process: StreamPartials %d", n)
+	}
+
+	streamRefused.Clear() // a new process
+	next := newTestClient(srv)
+	next.StateDir = dir
+	if n := next.StreamPartials(provider.Request{Prompt: "x"}); n != 0 {
+		t.Fatalf("refusal not remembered across runs: StreamPartials %d", n)
+	}
+	got, onPartial := collectPartials()
+	res, err := next.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
+	if err != nil || len(res.Images) != 1 || !bytes.Equal(res.Images[0].Data, final) || len(*got) != 0 {
+		t.Fatalf("res %+v err %v partials %d", res, err, len(*got))
+	}
+	if got := streamed(); !slices.Equal(got, []bool{true, false}) {
+		t.Errorf("calls %v, want the plain call on the next run", got)
+	}
+	other := newTestClient(srv)
+	other.APIKey, other.StateDir = "sk-other-org", dir
+	if n := other.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
+		t.Errorf("another key inherits the refusal: StreamPartials %d", n)
+	}
+	moved := New("sk-test")
+	moved.BaseURL, moved.StateDir = "https://proxy.example/v1", dir
+	if n := moved.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
+		t.Errorf("another endpoint inherits the refusal: StreamPartials %d", n)
+	}
+}
+
+// The state file holds one SHA-256 per refused key and endpoint, never the
+// key or the URL, and only the user can read it.
+func TestStreamRefusalStateFile(t *testing.T) {
+	t.Cleanup(streamRefused.Clear)
+	srv, _ := refusingServer(t, pngOf(t, 4, 4))
+	dir := filepath.Join(t.TempDir(), "state", "imgen")
+	c := newTestClient(srv)
+	c.StateDir = dir
+	_, onPartial := collectPartials()
+	if _, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial); !errors.Is(err, errStreamRefused) {
+		t.Fatalf("err = %v", err)
+	}
+	path := filepath.Join(dir, refusedFile)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != c.refusalKey()+"\n" || strings.Contains(string(b), c.APIKey) || strings.Contains(string(b), srv.URL) {
+		t.Errorf("state file %q", b)
+	}
+	for p, want := range map[string]os.FileMode{path: 0o600, dir: 0o700} {
+		fi, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != want {
+			t.Errorf("%s: mode %v, want %v", p, fi.Mode().Perm(), want)
+		}
+	}
+}
+
+// When the refusal cannot be saved, the process still remembers it, and
+// the error does not claim that later runs will: it names the switches that
+// turn streaming off.
+func TestStreamRefusalNotSaved(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, dir := range map[string]string{"no state dir": "", "dir under a file": filepath.Join(file, "imgen")} {
+		t.Run(name, func(t *testing.T) {
+			t.Cleanup(streamRefused.Clear)
+			srv, streamed := refusingServer(t, pngOf(t, 4, 4))
+			c := newTestClient(srv)
+			c.StateDir = dir
+			_, onPartial := collectPartials()
+			_, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
+			if !errors.Is(err, errStreamRefused) || strings.Contains(err.Error(), "streaming is now off") ||
+				!strings.Contains(err.Error(), "--no-stream") || !strings.Contains(err.Error(), "IMGEN_STREAM=off") {
+				t.Fatalf("err = %v", err)
+			}
+			if got := streamed(); len(got) != 1 {
+				t.Errorf("calls %v, want 1", got)
+			}
+			if n := c.StreamPartials(provider.Request{Prompt: "x"}); n != 0 {
+				t.Errorf("refusal not remembered in the process: StreamPartials %d", n)
+			}
+		})
+	}
+}
+
+// The factory keeps refusals next to the history: $XDG_STATE_HOME/imgen,
+// else ~/.local/state/imgen, and nowhere when neither is known.
+func TestFactoryStateDir(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-x")
+	state, home := t.TempDir(), t.TempDir()
+	cases := []struct{ xdg, home, want string }{
+		{state, home, filepath.Join(state, "imgen")},
+		{"", home, filepath.Join(home, ".local", "state", "imgen")},
+		{"", "", ""},
+	}
+	for _, tc := range cases {
+		t.Setenv("XDG_STATE_HOME", tc.xdg)
+		t.Setenv("HOME", tc.home)
+		p, err := provider.Build(provider.Config{Type: "openai"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := as[*Client](t, p).StateDir; got != tc.want {
+			t.Errorf("XDG_STATE_HOME %q HOME %q: StateDir %q, want %q", tc.xdg, tc.home, got, tc.want)
+		}
 	}
 }
 
@@ -476,42 +607,27 @@ func TestStreamPartials(t *testing.T) {
 	}
 }
 
-// A refusal to stream is remembered for the key and endpoint: later calls
-// in the process (new clients included) go straight to the plain call.
+// In one process (a batch job, an interactive session) the refusal is
+// remembered for the key and endpoint: after the error, later calls (new
+// clients included) go straight to the plain call.
 func TestStreamRefusalRemembered(t *testing.T) {
 	t.Cleanup(streamRefused.Clear)
-	final := pngOf(t, 4, 4)
-	var streamed, plain atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body["stream"] == true {
-			streamed.Add(1)
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = io.WriteString(w, `{"error":{"message":"Your organization must be verified to stream this model."}}`)
-			return
-		}
-		plain.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": b64(final)}}})
-	}))
-	defer srv.Close()
+	srv, streamed := refusingServer(t, pngOf(t, 4, 4))
+	dir := t.TempDir()
 	_, onPartial := collectPartials()
-	for range 3 {
+	for i := range 3 {
 		c := newTestClient(srv)
-		if _, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial); err != nil {
-			t.Fatal(err)
+		c.StateDir = dir
+		_, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
+		switch {
+		case i == 0 && !errors.Is(err, errStreamRefused):
+			t.Fatalf("first call: err %v, want the refusal", err)
+		case i > 0 && err != nil:
+			t.Fatalf("call %d: err %v", i+1, err)
 		}
 	}
-	if streamed.Load() != 1 || plain.Load() != 3 {
-		t.Errorf("stream requests %d, plain %d", streamed.Load(), plain.Load())
-	}
-	if n := newTestClient(srv).StreamPartials(provider.Request{Prompt: "x"}); n != 0 {
-		t.Errorf("StreamPartials after a refusal: %d", n)
-	}
-	other := newTestClient(srv)
-	other.APIKey = "sk-other-org"
-	if n := other.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
-		t.Errorf("another key inherits the refusal: %d", n)
+	if got := streamed(); !slices.Equal(got, []bool{true, false, false}) {
+		t.Errorf("calls %v, want one streamed call, then plain ones", got)
 	}
 }
 

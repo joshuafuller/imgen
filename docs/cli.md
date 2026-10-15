@@ -210,7 +210,8 @@ OpenAI bills each partial image as 100 extra image output tokens. For `gpt-image
 
 - `--no-stream` turns it off for one call. `IMGEN_STREAM=off` turns it off for all calls and sessions.
 - imgen does not stream with `-n` above 1, with DALL-E models, with a custom `base_url`, in `batch` and `compare`, or in the MCP server.
-- If OpenAI refuses to stream (for example, the organization is not verified), imgen makes the normal call and does not ask again until the process ends. Any other failure of a streamed call is an error with no automatic retry, because OpenAI may already have billed it: retry, or use `--no-stream`.
+- If OpenAI refuses to stream (for example, the organization is not verified), the call fails with `openai: this organization cannot stream images; streaming is now off for this key. Run the command again`. imgen does not make the normal call by itself, because it never sends a paid request twice. It saves the refusal for this key and endpoint in `openai-stream-refused` in the state folder (`$XDG_STATE_HOME/imgen`, default `~/.local/state/imgen`). The file holds only a SHA-256 hash, not the key. When you run the command again, imgen makes the normal call at once. To stream again, for example after you verify the organization, delete the file. If imgen cannot save the file, the error says so: use `--no-stream` or `IMGEN_STREAM=off`.
+- Any other failure of a streamed call is an error with no automatic retry, because OpenAI may already have billed it: retry, or use `--no-stream`.
 
 ## interactive
 

@@ -17,6 +17,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -70,6 +71,10 @@ type Client struct {
 	// NoStream makes GenerateStream a plain Generate. The factory sets it for
 	// a configured base URL: local servers may not speak server-sent events.
 	NoStream bool
+	// StateDir keeps the API's refusals to stream between runs. The factory
+	// sets $XDG_STATE_HOME/imgen; empty means a refusal lasts for the
+	// process only.
+	StateDir string
 
 	mu     sync.Mutex
 	cached *http.Client
@@ -80,6 +85,7 @@ func init() {
 	provider.Register("openai", func(cfg provider.Config) (provider.Provider, error) {
 		c := New("")
 		c.NameOverride = cfg.Name
+		c.StateDir = stateDir()
 		c.DefaultModel = cfg.DefaultModel
 		c.TransparentModel, _ = cfg.Options["transparent_model"].(string)
 		if cfg.BaseURL != "" {
@@ -104,6 +110,18 @@ func init() {
 // New returns a client with default base URL and HTTP client.
 func New(apiKey string) *Client {
 	return &Client{APIKey: apiKey, BaseURL: defaultBaseURL}
+}
+
+// stateDir is the folder of the history: $XDG_STATE_HOME/imgen, else
+// ~/.local/state/imgen, else "" (nothing is saved).
+func stateDir() string {
+	if x := os.Getenv("XDG_STATE_HOME"); x != "" {
+		return filepath.Join(x, "imgen")
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".local", "state", "imgen")
+	}
+	return ""
 }
 
 // policy derives the network policy from BaseURL. The documented host gets
@@ -202,7 +220,8 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 }
 
 // generate is Generate, streamed when onPartial is set and the request can
-// stream. Both paths share the model checks and the alpha check.
+// stream. It makes one call, streamed or plain, never both. Both paths
+// share the model checks and the alpha check.
 func (c *Client) generate(ctx context.Context, req provider.Request, onPartial func(provider.Image)) (*provider.Result, error) {
 	if req.Model != "" {
 		if err := provider.ValidModelID(req.Model); err != nil {
@@ -212,14 +231,12 @@ func (c *Client) generate(ctx context.Context, req provider.Request, onPartial f
 	transparent := req.Background == "transparent"
 	req = c.effective(req)
 	var (
-		imgs     []provider.Image
-		err      error
-		fallback = true
+		imgs []provider.Image
+		err  error
 	)
 	if onPartial != nil && c.canStream(req) {
-		imgs, fallback, err = c.stream(ctx, req, onPartial)
-	}
-	if fallback {
+		imgs, err = c.stream(ctx, req, onPartial)
+	} else {
 		imgs, err = c.plain(ctx, req)
 	}
 	if err != nil {

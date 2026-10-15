@@ -121,6 +121,7 @@ See [Extending](extending.md) for plugin details.
 |---|---|---|
 | History | `$XDG_STATE_HOME/imgen/history.jsonl`, else `~/.local/state/imgen/history.jsonl` | File mode 0600, folder 0700. Keys removed. |
 | Budget ledger | `budget.jsonl` beside the history, used when `IMGEN_HISTORY=off` and `IMGEN_BUDGET` is set | Mode 0600. Cost only: no prompt, arguments, files or error text. |
+| Stream refusals | `openai-stream-refused` beside the history: one line for each OpenAI key and endpoint that OpenAI refused to stream | File mode 0600, folder 0700. A SHA-256 hash only, never the key or the URL. Delete the file to stream again. |
 | `--meta` sidecars | `<image>.json` next to each image | Mode 0600, created new (never overwrites). Keys removed. |
 | Cache | `$XDG_CACHE_HOME/imgen`, else `~/.cache/imgen`. Used only with `--cache`. | Folder 0700, files 0600. |
 | Generated images | Your output folder | Mode 0644, so others on the machine can read them. |

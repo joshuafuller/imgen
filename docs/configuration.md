@@ -10,6 +10,7 @@ imgen works with no configuration beyond an API key. This page covers what you c
 | Rules file | `~/.config/imgen/rules.json` | `IMGEN_RULES` | any |
 | History | `~/.local/state/imgen/history.jsonl` | `XDG_STATE_HOME` | 0600, folder 0700 |
 | Budget ledger | `~/.local/state/imgen/budget.jsonl` | `XDG_STATE_HOME` | 0600 |
+| Stream refusals | `~/.local/state/imgen/openai-stream-refused` | `XDG_STATE_HOME` | 0600, folder 0700 |
 | Cache | `~/.cache/imgen/` | `XDG_CACHE_HOME` | 0600 files, folder 0700 |
 
 Run `imgen doctor` to see which rules file and key file imgen found.
