@@ -52,6 +52,9 @@ type Env struct {
 	// Live returns the in-place picture for streamed partial images on w, or
 	// nil when w cannot show one; nil means preview.NewLive.
 	Live func(w io.Writer) interactive.Live
+	// Probe detects the graphics of the terminal w once, before an
+	// interactive session reads keys; nil means preview.Probe.
+	Probe func(w io.Writer)
 	// Partial, when set, receives the partial images of every streaming
 	// gen or edit call, whatever the preview settings. The interactive
 	// session sets it on its own calls (which run with --json --quiet).

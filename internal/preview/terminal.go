@@ -16,11 +16,23 @@ import (
 	"golang.org/x/image/draw"
 )
 
-// Injection points so tests never query or measure a real terminal.
+// Injection points so tests never query or measure a real terminal. The
+// DA1 query runs at most once per process; later calls reuse its answer.
 var (
 	winsize  = defaultWinsize
 	da1Sixel = sync.OnceValue(queryDA1)
 )
+
+// Probe runs the graphics detection for w now, DA1 query included, so an
+// interactive session can do it before it starts reading keys: the answer
+// comes back on the same terminal, where a running key reader could take
+// it, or the probe could take keys. Later pictures reuse the result and
+// never query again. Probe does nothing when w is not a TTY.
+func Probe(w io.Writer) {
+	if isTTY(w) {
+		detect()
+	}
+}
 
 // protocol is a terminal graphics protocol.
 type protocol int

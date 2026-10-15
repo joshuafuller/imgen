@@ -104,6 +104,14 @@ func (e Env) live(w io.Writer) interactive.Live {
 	return nil
 }
 
+func (e Env) probe(w io.Writer) {
+	if e.Probe != nil {
+		e.Probe(w)
+		return
+	}
+	preview.Probe(w)
+}
+
 func (e Env) copyImage(path string) error {
 	if e.CopyImage != nil {
 		return e.CopyImage(path)

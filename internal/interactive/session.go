@@ -72,7 +72,10 @@ type Config struct {
 	Inline func(w io.Writer, path string) (bool, error)
 	// Live returns the in-place picture for partial images, or nil when the
 	// terminal has no graphics. Nil means no streaming.
-	Live   func(w io.Writer) Live
+	Live func(w io.Writer) Live
+	// Probe detects the terminal's graphics once (preview.Probe), before
+	// the key reader starts: the DA1 answer must not race it. Nil means none.
+	Probe  func()
 	Open   func(path string) error
 	Copy   func(path string) error
 	Styled bool // use terminal colors
@@ -114,6 +117,9 @@ func Run(ctx context.Context, cfg Config) (err error) {
 			err = fmt.Errorf("interactive: restore terminal: %w", rerr)
 		}
 	}()
+	if cfg.Probe != nil {
+		cfg.Probe() // before readInput: both read the terminal
+	}
 	stop := make(chan struct{})
 	defer close(stop)
 	s := &session{cfg: cfg, out: cfg.Out, st: term.Style{On: cfg.Styled}, set: cfg.Settings, ev: make(chan event, 64)}

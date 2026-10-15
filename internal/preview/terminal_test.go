@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -266,6 +267,40 @@ func TestSixelFitsTerminalPixels(t *testing.T) {
 	}
 	if !strings.HasPrefix(b.String(), "\x1bP0;1;0q\"1;1;800;400") {
 		t.Fatalf("raster %q", b.String()[:30])
+	}
+}
+
+// Probe asks DA1 once, before a session reads keys; every later picture
+// reuses the answer and never queries the terminal again.
+func TestProbeQueriesOnceAndIsReused(t *testing.T) {
+	p := writeImage(t, quadrants())
+	f := newFake("linux")
+	f.env["TERM"] = "xterm-256color" // known only by its DA1 answer
+	termFake(t, f, 80, 24, 10, 20)
+	queries := 0
+	da1Sixel = sync.OnceValue(func() bool { queries++; return true })
+	var b bytes.Buffer
+	Probe(&b)
+	if queries != 1 || b.Len() != 0 {
+		t.Fatalf("probe: %d queries, wrote %q", queries, b.String())
+	}
+	for range 2 {
+		if ok, err := Inline(&b, p); !ok || err != nil {
+			t.Fatalf("ok=%v err=%v", ok, err)
+		}
+		if NewLive(&b) == nil {
+			t.Fatal("no live picture with sixel")
+		}
+	}
+	if queries != 1 || !strings.Contains(b.String(), "\x1bP0;1;0q") {
+		t.Fatalf("%d queries after the probe; output %q", queries, head(b.String()))
+	}
+
+	queries = 0
+	da1Sixel = sync.OnceValue(func() bool { queries++; return true })
+	isTTY = func(io.Writer) bool { return false }
+	if Probe(&b); queries != 0 {
+		t.Fatal("probed a writer that is not a terminal")
 	}
 }
 

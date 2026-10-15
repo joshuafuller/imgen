@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/joshuafuller/imgen/internal/interactive"
 )
@@ -178,6 +180,53 @@ func TestInteractiveFullPathWithFakeProvider(t *testing.T) {
 	}
 	if !strings.Contains(h.errb.String(), "back to "+filepath.Join(dir, "fox-2.png")) {
 		t.Fatalf("/undo did not go back to the pick:\n%s", h.errb.String())
+	}
+}
+
+// orderReader records the first read of stdin: the session's key reader.
+type orderReader struct {
+	r     io.Reader
+	mu    *sync.Mutex
+	order *[]string
+	read  bool
+}
+
+func (o *orderReader) Read(p []byte) (int, error) {
+	o.mu.Lock()
+	if !o.read {
+		o.read = true
+		*o.order = append(*o.order, "read")
+	}
+	o.mu.Unlock()
+	return o.r.Read(p)
+}
+
+// The session probes the terminal (the DA1 query) on stderr once, before
+// its key reader reads stdin.
+func TestInteractiveProbesBeforeReadingKeys(t *testing.T) {
+	h := newHarness(t)
+	withConsole(h, "")
+	var (
+		mu    sync.Mutex
+		order []string
+	)
+	h.env.Stdin = &orderReader{r: strings.NewReader("fox\rbluer\r/quit\r"), mu: &mu, order: &order}
+	h.env.Probe = func(w io.Writer) {
+		if w != &h.errb {
+			t.Error("probe is not on the session's terminal (stderr)")
+		}
+		time.Sleep(50 * time.Millisecond) // the answer's wait: a running reader would read now
+		mu.Lock()
+		order = append(order, "probe")
+		mu.Unlock()
+	}
+	if c := h.run("-i", "-o", t.TempDir()); c != 0 {
+		t.Fatalf("code %d: %s", c, h.errb.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(order, ",") != "probe,read" || len(h.f.got) != 2 {
+		t.Fatalf("order %v, calls %d", order, len(h.f.got))
 	}
 }
 

@@ -75,6 +75,7 @@ func startSession(env Env, stderr io.Writer, con interactive.Terminal, st intera
 		Providers: env.Rules.Names(), Styles: env.Rules.StyleNames(), Profiles: env.Rules.ProfileNames(),
 		Budget: env.getenv("IMGEN_BUDGET"), Styled: env.style(stderr).On,
 		Inline: env.inline, Live: env.live, Open: env.openFile, Copy: env.copyImage,
+		Probe: func() { env.probe(stderr) },
 	})
 	if errors.Is(err, interactive.ErrSignal) {
 		return nil
