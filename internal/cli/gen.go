@@ -244,6 +244,28 @@ func buildRequest(ctx context.Context, env Env, o *genOpts, pos []string, edit b
 	return req, nil
 }
 
+// postFor parses the post-processing flags of o.
+func postFor(o *genOpts) (postSpec, error) {
+	ps, err := parsePost(o.resize, o.crop, o.removeBG.on, o.denoise.level)
+	if err != nil {
+		return ps, err
+	}
+	if o.removeBG.on {
+		ps.screen = o.removeBG.screen
+	}
+	return ps, ps.parsePixel(o.pixel, o.colors, o.palette)
+}
+
+// screenRequest asks the model for the --remove-bg screen color and puts
+// cutout inputs on it.
+func (oc *outcome) screenRequest() error {
+	if !oc.post.removeBG {
+		return nil
+	}
+	oc.req.Prompt += " " + oc.post.screen.Prompt()
+	return flattenInputs(oc.req.Inputs, oc.post.screen)
+}
+
 // flattenInputs puts each input with transparent pixels on the screen color
 // of --remove-bg, so a cutout given as a reference shows the model the
 // background it must draw. The mask is never changed.
@@ -316,14 +338,8 @@ func execute(ctx context.Context, env Env, o *genOpts, pos []string, edit bool, 
 	if err != nil {
 		return nil, err
 	}
-	ps, err := parsePost(o.resize, o.crop, o.removeBG.on, o.denoise.level)
+	ps, err := postFor(o)
 	if err != nil {
-		return nil, err
-	}
-	if o.removeBG.on {
-		ps.screen = o.removeBG.screen
-	}
-	if err := ps.parsePixel(o.pixel, o.colors, o.palette); err != nil {
 		return nil, err
 	}
 	deadline, err := callTimeout(o, cfg)
@@ -340,11 +356,8 @@ func execute(ctx context.Context, env Env, o *genOpts, pos []string, edit bool, 
 		return nil, err
 	}
 	oc := &outcome{cfg: cfg, req: req, post: ps, o: o, prompt: req.Prompt, red: newRedactor(env)}
-	if ps.removeBG {
-		oc.req.Prompt += " " + ps.screen.Prompt()
-		if err := flattenInputs(oc.req.Inputs, ps.screen); err != nil {
-			return nil, err
-		}
+	if err := oc.screenRequest(); err != nil {
+		return nil, err
 	}
 	if o.dryRun {
 		return oc.dryRun(env, info), nil

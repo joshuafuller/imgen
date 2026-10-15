@@ -53,11 +53,11 @@ func Flatten(data []byte, s Screen) (out []byte, ok bool, err error) {
 		return nil, false, err
 	}
 	im := keyBuffer(src)
-	clear := false
-	for i := 3; i < len(im.Pix) && !clear; i += 4 {
-		clear = im.Pix[i] < 255
+	seeThrough := false
+	for i := 3; i < len(im.Pix) && !seeThrough; i += 4 {
+		seeThrough = im.Pix[i] < 255
 	}
-	if !clear {
+	if !seeThrough {
 		return data, false, nil
 	}
 	bg := image.NewNRGBA(im.Bounds())

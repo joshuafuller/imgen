@@ -211,7 +211,8 @@ func medianCut(px []color.NRGBA, n int) color.Palette {
 		for _, e := range g {
 			r, gr, b, k = r+int(e.c.R)*e.n, gr+int(e.c.G)*e.n, b+int(e.c.B)*e.n, k+e.n
 		}
-		pal = append(pal, color.NRGBA{R: uint8((r + k/2) / k), G: uint8((gr + k/2) / k), B: uint8((b + k/2) / k), A: 255})
+		n := float64(k)
+		pal = append(pal, color.NRGBA{R: byte8(float64(r) / n), G: byte8(float64(gr) / n), B: byte8(float64(b) / n), A: 255})
 	}
 	return pal
 }

@@ -206,6 +206,13 @@ func (ps postSpec) keyCropResize(img provider.Image) (provider.Image, error) {
 			return img, fmt.Errorf("crop: %w", err)
 		}
 	}
+	return ps.pixelResize(img, resized)
+}
+
+// pixelResize runs pixel, then resize unless it already ran. After --pixel,
+// resize samples nearest-neighbor.
+func (ps postSpec) pixelResize(img provider.Image, resized bool) (provider.Image, error) {
+	var err error
 	if ps.pixel > 0 {
 		if img.Data, err = post.Pixelate(img.Data, ps.pixel, ps.colors, ps.palette); err != nil {
 			return img, fmt.Errorf("pixel: %w", err)
