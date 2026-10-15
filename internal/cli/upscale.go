@@ -18,13 +18,14 @@ import (
 )
 
 const upscaleHelp = `usage: imgen upscale [-p replicate|fal] [-m model] [--scale 2|4] [--local] in.png
-Make an image larger. The input may be a file, a URL or "clip:". The default
-provider and model come from the "upscale" rule. --local scales on this machine
-with no API call. The result is saved as <input>-x<scale>.<ext>.`
+Make an image larger. The input (an argument or -i) may be a file, a URL,
+"clip:" or "-" for stdin. The default provider and model come from the
+"upscale" rule. --local scales on this machine with no API call. The result is
+saved as <input>-x<scale>.<ext>, or written to stdout with -o -.`
 
 // upscaleOpts holds the parsed flags of upscale.
 type upscaleOpts struct {
-	gen   genOpts // reuses -o, --name, --json, --quiet, --open, --preview, --copy, --notify, --timeout
+	gen   genOpts // reuses -i, -o, --name, --json, --quiet, --open, --preview, --copy, --notify, --timeout
 	prov  string
 	model string
 	scale int
@@ -39,7 +40,8 @@ func runUpscale(args []string, stdout, stderr io.Writer, env Env) error {
 	fs.IntVar(&u.scale, "scale", 2, "scale factor: 2 or 4")
 	fs.BoolVar(&u.local, "local", false, "scale locally with no API call")
 	o := &u.gen
-	fs.StringVar(&o.outDir, "o", ".", "output folder `DIR`")
+	fs.Var(&o.inputs, "i", "input image `FILE`: a path, URL, clip: or - for stdin")
+	fs.StringVar(&o.outDir, "o", ".", "output folder `DIR`, or - for stdout")
 	fs.StringVar(&o.name, "name", "", "file base `NAME`")
 	fs.BoolVar(&o.asJSON, "json", false, "print the result as JSON")
 	fs.DurationVar(&o.timeout, "timeout", defaultTimeout, "deadline for the whole call")
@@ -52,26 +54,32 @@ func runUpscale(args []string, stdout, stderr io.Writer, env Env) error {
 	if err != nil {
 		return err
 	}
-	if len(pos) != 1 {
-		return usagef("upscale takes one input image, got %d arguments", len(pos))
+	src := append(o.inputs, pos...)
+	if len(src) != 1 {
+		return usagef("upscale takes one input image (an argument or -i), got %d", len(src))
 	}
 	if u.scale != 2 && u.scale != 4 {
 		return usagef("--scale must be 2 or 4, got %d", u.scale)
+	}
+	if err := setPipes(env, o, stdout); err != nil {
+		return err
 	}
 	info := stderr
 	if o.quiet {
 		info = io.Discard
 	}
-	path, took, err := doUpscale(env, u, pos[0], info)
-	recordUpscale(env, u, args, pos[0], path, err)
+	path, took, err := doUpscale(env, u, src[0], info)
+	recordUpscale(env, u, args, src[0], path, err)
 	if o.asJSON {
 		return emitUpscaleJSON(stdout, path, took, err)
 	}
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, path)
-	afterSave(env, o, []string{path}, info)
+	if o.stdout == nil {
+		fmt.Fprintln(stdout, path)
+		afterSave(env, o, []string{path}, info)
+	}
 	if o.notify {
 		warn(info, o.quiet, "notify", env.notify("imgen upscale", filepath.Base(path)))
 	}
@@ -102,7 +110,7 @@ func doUpscale(env Env, u *upscaleOpts, src string, info io.Writer) (string, tim
 		ctx, cancel = context.WithTimeout(ctx, u.gen.timeout)
 		defer cancel()
 	}
-	img, err := readInput(ctx, src)
+	img, err := readInput(ctx, u.gen.stdin, src)
 	if err != nil {
 		return "", 0, usagef("cannot read input %s: %v", src, err)
 	}
@@ -118,6 +126,13 @@ func doUpscale(env Env, u *upscaleOpts, src string, info io.Writer) (string, tim
 		return "", 0, err
 	}
 	took := env.Now().Sub(start)
+	if u.gen.stdout != nil {
+		if _, err := u.gen.stdout.Write(out.Data); err != nil {
+			return "", 0, err
+		}
+		reportSize(info, out.Data)
+		return stdio, took, nil
+	}
 	name := u.gen.name
 	if name == "" {
 		name = upscaleName(src, u.scale)
@@ -127,16 +142,20 @@ func doUpscale(env Env, u *upscaleOpts, src string, info io.Writer) (string, tim
 	}
 	path, err := saveUnique(u.gen.outDir, name, extFor(out.MimeType, ""), out.Data)
 	if err == nil {
-		w, h, _ := post.Dimensions(out.Data)
-		fmt.Fprintf(info, "size: %dx%d\n", w, h)
+		reportSize(info, out.Data)
 	}
 	return path, took, err
+}
+
+func reportSize(info io.Writer, data []byte) {
+	w, h, _ := post.Dimensions(data)
+	fmt.Fprintf(info, "size: %dx%d\n", w, h)
 }
 
 // upscaleName is <input base>-x<scale>; a URL or clipboard input has no base.
 func upscaleName(src string, scale int) string {
 	base := "image"
-	if !strings.Contains(src, "://") && src != "clip:" {
+	if !strings.Contains(src, "://") && src != "clip:" && src != stdio {
 		base = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 	}
 	return fmt.Sprintf("%s-x%d", naming.Slug(base, slugMax), scale)

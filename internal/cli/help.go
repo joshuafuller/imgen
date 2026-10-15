@@ -133,7 +133,7 @@ func genFlagHelp(cmd string) []helpGroup {
 			{"-P, --prompt-file FILE", `read the prompt from FILE ("-" as the prompt reads stdin)`},
 			prov,
 			{"-m, --model ID", "model ID or latest (default: the provider's default)"},
-			{"-i, --input FILE", "input image: a path, an http(s) URL or clip: (repeatable)"},
+			{"-i, --input FILE", "input image: a path, an http(s) URL, clip: or - for stdin (repeatable)"},
 			{"--mask FILE", "limit an edit to the area of this mask image"},
 			{"--last", "use the newest output in the history as an input"},
 			{"--style NAME", "append a named style to the prompt (repeatable; imgen styles)"},
@@ -157,7 +157,7 @@ func genFlagHelp(cmd string) []helpGroup {
 			{"--remove-bg", "render on green and key it out (PNG output)"},
 		}},
 		{"Output", [][2]string{
-			{"-o, --output DIR", "output folder (default .)"},
+			{"-o, --output DIR", "output folder (default .), or - for stdout (one image)"},
 			{"--name NAME", "file base name (default: from the prompt)"},
 			{"--json", "print one JSON object per result on stdout"},
 			{"--meta", "also write <image>.json with the request and result"},

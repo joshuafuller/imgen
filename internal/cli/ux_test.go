@@ -135,7 +135,7 @@ func TestHelpCoversEveryFlag(t *testing.T) {
 			fs.Int("j", 4, "")
 			fs.Int("grid-cols", 0, "")
 		case "upscale":
-			for _, n := range []string{"p", "m", "o", "name", "timeout"} {
+			for _, n := range []string{"p", "m", "i", "o", "name", "timeout"} {
 				fs.String(n, "", "")
 			}
 			for _, n := range []string{"scale", "local", "json", "open", "preview", "copy", "quiet", "notify"} {

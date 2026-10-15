@@ -132,5 +132,8 @@ func lastOutput(env Env) (string, error) {
 	if err != nil || len(e.Files) == 0 {
 		return "", usagef("--last: no earlier output in the history")
 	}
+	if e.Files[0] == stdio {
+		return "", usagef("--last: the newest output went to stdout (-o -), not to a file")
+	}
 	return e.Files[0], nil
 }

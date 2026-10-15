@@ -51,6 +51,10 @@ type Env struct {
 	// term.Enabled. Tests use it to see the terminal rendering.
 	Styled func(w io.Writer) bool
 
+	// IsTerminal reports whether a writer is a terminal, so -o - never
+	// writes image bytes to one; nil means a character-device check.
+	IsTerminal func(w io.Writer) bool
+
 	// Load errors from main. They stop every command but doctor, which
 	// reports them.
 	RulesErr, EnvFileErr error
@@ -278,10 +282,10 @@ func parseExtras(sets []string) (map[string]any, error) {
 	return extra, nil
 }
 
-func readInputs(ctx context.Context, paths []string) ([]provider.Image, error) {
+func readInputs(ctx context.Context, stdin io.Reader, paths []string) ([]provider.Image, error) {
 	var imgs []provider.Image
 	for _, path := range paths {
-		img, err := readInput(ctx, path)
+		img, err := readInput(ctx, stdin, path)
 		if err != nil {
 			return nil, usagef("cannot read input %s: %v", path, err)
 		}
@@ -290,8 +294,19 @@ func readInputs(ctx context.Context, paths []string) ([]provider.Image, error) {
 	return imgs, nil
 }
 
-// readInput loads one -i value: a URL or "clip:" through fetch, else a local file.
-func readInput(ctx context.Context, src string) (provider.Image, error) {
+// readInput loads one -i value: "-" from stdin (nil stdin refuses it), a URL
+// or "clip:" through fetch, else a local file.
+func readInput(ctx context.Context, stdin io.Reader, src string) (provider.Image, error) {
+	if src == stdio {
+		if stdin == nil {
+			return provider.Image{}, errNoStdin
+		}
+		data, err := imgcheck.ReadCapped(stdin, imgcheck.MaxInputBytes)
+		if err != nil {
+			return provider.Image{}, err
+		}
+		return checkedInput(data)
+	}
 	if src == "clip:" || strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
 		data, _, err := fetch.Resolve(ctx, src)
 		if err != nil {

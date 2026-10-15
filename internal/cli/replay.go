@@ -44,7 +44,7 @@ func setValue(a string, args []string, i int) (string, int) {
 func replayArgs(o *genOpts, pos []string, red redactor) []string {
 	args := slices.Clone(o.histArgs)
 	if len(pos) == 1 && pos[0] == "-" {
-		if i := slices.Index(args, "-"); i >= 0 {
+		if i := stdinPrompt(args); i >= 0 {
 			args[i] = red.scrub(o.userPrompt)
 		}
 	}

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/joshuafuller/imgen/internal/enhance"
@@ -57,6 +58,20 @@ func (e Env) appendEntry(en history.Entry) error {
 	}
 	en.Prompt, en.Args, en.Files, en.Error = "", nil, nil, ""
 	return history.Open(history.LedgerPath()).Append(en)
+}
+
+// isTerminal reports whether w is a terminal. Unlike style it ignores
+// NO_COLOR and TERM: it guards binary output, not colors.
+func (e Env) isTerminal(w io.Writer) bool {
+	if e.IsTerminal != nil {
+		return e.IsTerminal(w)
+	}
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	st, err := f.Stat()
+	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
 func (e Env) openFile(path string) error {

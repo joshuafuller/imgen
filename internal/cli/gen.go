@@ -95,6 +95,8 @@ type genOpts struct {
 	histCmd, userPrompt                                         string // set by the commands, not flags
 	histArgs                                                    []string
 	noHist                                                      bool
+	stdin                                                       io.Reader // "-" of -i and --mask; set by setPipes
+	stdout                                                      io.Writer // -o -; set by setPipes
 }
 
 func registerGenFlags(fs *flag.FlagSet, o *genOpts) {
@@ -106,8 +108,8 @@ func registerGenFlags(fs *flag.FlagSet, o *genOpts) {
 	fs.StringVar(&o.format, "f", "", "output format")
 	fs.StringVar(&o.bg, "b", "", "background")
 	fs.IntVar(&o.n, "n", 0, "number of images")
-	fs.Var(&o.inputs, "i", "input image (repeatable)")
-	fs.StringVar(&o.outDir, "o", ".", "output directory")
+	fs.Var(&o.inputs, "i", "input image, or - for stdin (repeatable)")
+	fs.StringVar(&o.outDir, "o", ".", "output directory, or - for stdout")
 	fs.StringVar(&o.name, "name", "", "output base name")
 	fs.Var(&o.sets, "set", "key=value extra param (repeatable)")
 	fs.StringVar(&o.promptFile, "P", "", "read prompt from file")
@@ -169,11 +171,8 @@ func buildRequest(ctx context.Context, env Env, o *genOpts, pos []string, edit b
 		}
 		o.inputs = append(o.inputs, path)
 	}
-	if edit && len(o.inputs) == 0 {
-		return provider.Request{}, usagef("edit needs an input image. Add one with -i in.png (a path, URL or clip:)")
-	}
-	if o.maskPath != "" && !edit && len(o.inputs) == 0 {
-		return provider.Request{}, usagef("--mask needs an edit: use imgen edit -i in.png --mask mask.png")
+	if err := checkInputs(o, pos, edit); err != nil {
+		return provider.Request{}, err
 	}
 	prompt, err := readPrompt(pos, o.promptFile, env.Stdin)
 	if err != nil {
@@ -194,17 +193,28 @@ func buildRequest(ctx context.Context, env Env, o *genOpts, pos []string, edit b
 	if req.Extra, err = buildExtra(o); err != nil {
 		return req, err
 	}
-	if req.Inputs, err = readInputs(ctx, o.inputs); err != nil {
+	if req.Inputs, err = readInputs(ctx, o.stdin, o.inputs); err != nil {
 		return req, err
 	}
 	if o.maskPath != "" {
-		mask, merr := readInputs(ctx, []string{o.maskPath})
+		mask, merr := readInputs(ctx, o.stdin, []string{o.maskPath})
 		if merr != nil {
 			return req, merr
 		}
 		req.Mask = &mask[0]
 	}
 	return req, nil
+}
+
+// checkInputs checks the -i, --mask and stdin rules before anything is read.
+func checkInputs(o *genOpts, pos []string, edit bool) error {
+	if edit && len(o.inputs) == 0 {
+		return usagef("edit needs an input image. Add one with -i in.png (a path, URL or clip:)")
+	}
+	if o.maskPath != "" && !edit && len(o.inputs) == 0 {
+		return usagef("--mask needs an edit: use imgen edit -i in.png --mask mask.png")
+	}
+	return checkStdin(o, pos)
 }
 
 // finalPrompt applies --enhance (not in a dry run), then the --style texts.
@@ -243,6 +253,9 @@ func buildExtra(o *genOpts) (map[string]any, error) {
 func execute(ctx context.Context, env Env, o *genOpts, pos []string, edit bool, info io.Writer) (*outcome, error) {
 	if err := guardName(o.name); err != nil {
 		return nil, err
+	}
+	if o.outDir == stdio && o.stdout == nil {
+		return nil, errNoStdout // batch and compare: refuse before any paid call
 	}
 	cfg, err := lookup(env, o.prov)
 	if err != nil {
@@ -529,6 +542,9 @@ func runGen(args []string, stdout, stderr io.Writer, env Env, edit bool) error {
 	if err != nil {
 		return err
 	}
+	if err := setPipes(env, o, stdout); err != nil {
+		return err
+	}
 	o.histArgs = sanitizeArgs(env, args)
 	info := stderr
 	if o.quiet {
@@ -546,11 +562,16 @@ func runGen(args []string, stdout, stderr io.Writer, env Env, edit bool) error {
 		return err
 	}
 	if oc.isDry {
+		if o.stdout != nil {
+			stdout = stderr // stdout carries only image bytes
+		}
 		oc.printDry(stdout)
 		return nil
 	}
-	for _, f := range oc.outputs() {
-		fmt.Fprintln(stdout, f)
+	if o.stdout == nil {
+		for _, f := range oc.outputs() {
+			fmt.Fprintln(stdout, f)
+		}
 	}
 	finish(env, o, oc, info)
 	return nil
@@ -561,7 +582,9 @@ func finish(env Env, o *genOpts, oc *outcome, info io.Writer) {
 	if oc == nil || oc.isDry {
 		return
 	}
-	afterSave(env, o, oc.outputs(), info)
+	if o.stdout == nil {
+		afterSave(env, o, oc.outputs(), info)
+	}
 	if o.notify {
 		warn(info, o.quiet, "notify", env.notify("imgen", fmt.Sprintf("%d image(s) done: %s", len(oc.files), oc.o.userPrompt)))
 	}

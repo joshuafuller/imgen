@@ -201,6 +201,9 @@ func (env Env) take(n int) error {
 // discard removes everything this outcome has written, after a refused write.
 func (oc *outcome) discard() {
 	for _, f := range oc.files {
+		if f.Path == stdio {
+			continue
+		}
 		_ = os.Remove(f.Path)
 		if f.Meta != "" {
 			_ = os.Remove(f.Meta)
@@ -226,6 +229,9 @@ func (oc *outcome) save(imgs []provider.Image, name string, env Env) error {
 }
 
 func (oc *outcome) saveAll(imgs []provider.Image, name string, env Env) error {
+	if oc.o.outDir == stdio {
+		return oc.writeStdout(imgs, env)
+	}
 	imgs, err := oc.post.applyAll(imgs)
 	if err != nil {
 		return err
@@ -261,6 +267,34 @@ func (oc *outcome) saveAll(imgs []provider.Image, name string, env Env) error {
 		}
 	}
 	return oc.writeGrid(name, env)
+}
+
+// writeStdout writes the one image of -o - to stdout, after post-processing
+// and embedding, so a failure never leaves part of an image there. Its path
+// is "-" in the history.
+func (oc *outcome) writeStdout(imgs []provider.Image, env Env) error {
+	if oc.o.stdout == nil {
+		return errNoStdout
+	}
+	if len(imgs) != 1 {
+		return fmt.Errorf("-o - writes exactly one image, but the provider returned %d; use -o DIR", len(imgs))
+	}
+	imgs, err := oc.post.applyAll(imgs)
+	if err != nil {
+		return err
+	}
+	img := imgs[0]
+	img.Data = oc.embed(img, env)
+	if err := env.take(len(img.Data)); err != nil {
+		return err
+	}
+	if _, err := oc.o.stdout.Write(img.Data); err != nil {
+		return err
+	}
+	f := fileOut{Path: stdio, Mime: img.MimeType, Bytes: len(img.Data)}
+	f.W, f.H, _ = post.Dimensions(img.Data)
+	oc.files = append(oc.files, f)
+	return nil
 }
 
 // embed writes the imgen version, provider and model into PNG/JPEG data, plus

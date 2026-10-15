@@ -59,7 +59,7 @@ func TestReadInputRefusesNonImageFile(t *testing.T) {
 	if err := os.WriteFile(p, []byte("not an image"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := readInput(t.Context(), p); err == nil {
+	if _, err := readInput(t.Context(), nil, p); err == nil {
 		t.Error("non-image accepted")
 	}
 }
