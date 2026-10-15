@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: imgen
+
+builds:
+  - id: imgen
+    main: ./cmd/imgen
+    binary: imgen
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: imgen
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - id: archive-sboms
+    artifacts: archive
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+    documents: ["${artifact}.sbom.spdx.json"]
+
+# Release notes come from CHANGELOG.md via `--release-notes` (see docs/RELEASING.md).
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: joshuafuller
+    name: imgen
+  prerelease: auto
+  name_template: "imgen v{{ .Version }}"
+  footer: |
+    ## Install
+
+    ```sh
+    go install github.com/joshuafuller/imgen/cmd/imgen@v{{ .Version }}
+    # or
+    curl -fsSL https://raw.githubusercontent.com/joshuafuller/imgen/v{{ .Version }}/packaging/install.sh | sh
+    ```
+
+    Verify a download:
+
+    ```sh
+    sha256sum --ignore-missing -c imgen_{{ .Version }}_checksums.txt
+    gh attestation verify imgen_{{ .Version }}_<os>_<arch>.tar.gz --repo joshuafuller/imgen
+    ```
+
+    Full history: [CHANGELOG.md](https://github.com/joshuafuller/imgen/blob/v{{ .Version }}/CHANGELOG.md)
+
+# Formula-based "brews" is deprecated in goreleaser v2.10+; casks are the replacement (macOS only).
+homebrew_casks:
+  - name: imgen
+    repository:
+      owner: joshuafuller
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/joshuafuller/imgen
+    description: One CLI for every image model
+    skip_upload: auto

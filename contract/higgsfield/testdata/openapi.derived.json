@@ -1,0 +1,1724 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Higgsfield API (image subset, derived)",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.higgsfield.ai"
+    }
+  ],
+  "paths": {
+    "/higgsfield-ai/soul/v2/standard": {
+      "post": {
+        "summary": "soul-2/generate (https://docs.higgsfield.ai/docs/models/soul-2/generate.md)",
+        "operationId": "post_higgsfield_ai_soul_v2_standard",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "prompt": {
+                    "title": "Prompt",
+                    "type": "string"
+                  },
+                  "aspect_ratio": {
+                    "default": "1:1",
+                    "enum": [
+                      "9:16",
+                      "16:9",
+                      "4:3",
+                      "3:4",
+                      "1:1",
+                      "2:3",
+                      "3:2"
+                    ],
+                    "title": "Aspect Ratio",
+                    "type": "string"
+                  },
+                  "resolution": {
+                    "default": "720p",
+                    "enum": [
+                      "720p",
+                      "1080p"
+                    ],
+                    "title": "Resolution",
+                    "type": "string"
+                  },
+                  "enhance_prompt": {
+                    "default": false,
+                    "title": "Enhance Prompt",
+                    "type": "boolean"
+                  },
+                  "custom_reference_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Custom Reference Id"
+                  },
+                  "custom_reference_strength": {
+                    "default": 1.0,
+                    "maximum": 1,
+                    "minimum": 0,
+                    "title": "Custom Reference Strength",
+                    "type": "number"
+                  },
+                  "style_id": {
+                    "default": "3db34ab5-3439-4317-9e03-08dc30852e69",
+                    "format": "uuid",
+                    "title": "Style Id",
+                    "type": "string"
+                  },
+                  "style_strength": {
+                    "default": 1.0,
+                    "maximum": 1,
+                    "minimum": 0,
+                    "title": "Style Strength",
+                    "type": "number"
+                  },
+                  "seed": {
+                    "maximum": 1000000,
+                    "minimum": 1,
+                    "title": "Seed",
+                    "type": "integer"
+                  },
+                  "batch_size": {
+                    "default": 1,
+                    "enum": [
+                      1,
+                      4
+                    ],
+                    "title": "Batch Size",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "prompt"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/higgsfield-ai/soul/standard": {
+      "post": {
+        "summary": "soul-standard/generate (https://docs.higgsfield.ai/docs/models/soul-standard/generate.md)",
+        "operationId": "post_higgsfield_ai_soul_standard",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "prompt": {
+                    "title": "Prompt",
+                    "type": "string"
+                  },
+                  "aspect_ratio": {
+                    "default": "4:3",
+                    "enum": [
+                      "9:16",
+                      "16:9",
+                      "4:3",
+                      "3:4",
+                      "1:1",
+                      "2:3",
+                      "3:2"
+                    ],
+                    "title": "Aspect Ratio",
+                    "type": "string"
+                  },
+                  "enhance_prompt": {
+                    "default": false,
+                    "title": "Enhance Prompt",
+                    "type": "boolean"
+                  },
+                  "style_id": {
+                    "default": "464ea177-8d40-4940-8d9d-b438bab269c7",
+                    "format": "uuid",
+                    "title": "Style Id",
+                    "type": "string"
+                  },
+                  "style_strength": {
+                    "default": 1.0,
+                    "maximum": 1,
+                    "minimum": 0,
+                    "title": "Style Strength",
+                    "type": "number"
+                  },
+                  "resolution": {
+                    "default": "720p",
+                    "enum": [
+                      "720p",
+                      "1080p"
+                    ],
+                    "title": "Resolution",
+                    "type": "string"
+                  },
+                  "seed": {
+                    "anyOf": [
+                      {
+                        "maximum": 1000000,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Seed"
+                  },
+                  "custom_reference_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Custom Reference Id"
+                  },
+                  "custom_reference_strength": {
+                    "default": 1.0,
+                    "maximum": 1,
+                    "minimum": 0,
+                    "title": "Custom Reference Strength",
+                    "type": "number"
+                  },
+                  "image_reference_url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 2083,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Image Reference Url"
+                  },
+                  "batch_size": {
+                    "default": 1,
+                    "enum": [
+                      1,
+                      4
+                    ],
+                    "title": "Batch Size",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "prompt"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/higgsfield-ai/soul/cinema": {
+      "post": {
+        "summary": "soul-cinema/generate (https://docs.higgsfield.ai/docs/models/soul-cinema/generate.md)",
+        "operationId": "post_higgsfield_ai_soul_cinema",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "prompt": {
+                    "title": "Prompt",
+                    "type": "string"
+                  },
+                  "aspect_ratio": {
+                    "default": "1:1",
+                    "enum": [
+                      "9:16",
+                      "16:9",
+                      "4:3",
+                      "3:4",
+                      "1:1",
+                      "2:3",
+                      "3:2"
+                    ],
+                    "title": "Aspect Ratio",
+                    "type": "string"
+                  },
+                  "enhance_prompt": {
+                    "default": false,
+                    "title": "Enhance Prompt",
+                    "type": "boolean"
+                  },
+                  "resolution": {
+                    "default": "720p",
+                    "enum": [
+                      "720p",
+                      "1080p"
+                    ],
+                    "title": "Resolution",
+                    "type": "string"
+                  },
+                  "custom_reference_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Custom Reference Id"
+                  },
+                  "custom_reference_strength": {
+                    "default": 1.0,
+                    "maximum": 1,
+                    "minimum": 0,
+                    "title": "Custom Reference Strength",
+                    "type": "number"
+                  },
+                  "seed": {
+                    "maximum": 1000000,
+                    "minimum": 1,
+                    "title": "Seed",
+                    "type": "integer"
+                  },
+                  "batch_size": {
+                    "default": 1,
+                    "enum": [
+                      1,
+                      4
+                    ],
+                    "title": "Batch Size",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "prompt"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alibaba/qwen-image-3/text-to-image": {
+      "post": {
+        "summary": "qwen-image-3/text-to-image (https://docs.higgsfield.ai/docs/models/qwen-image-3/text-to-image.md)",
+        "operationId": "post_alibaba_qwen_image_3_text_to_image",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "enable_thinking"
+                      ],
+                      "properties": {
+                        "enable_thinking": {
+                          "const": true
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "prompt_extend"
+                      ],
+                      "properties": {
+                        "prompt_extend": {
+                          "const": true
+                        }
+                      }
+                    }
+                  }
+                ],
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "seed": {
+                    "type": "integer",
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "description": "Optional random seed for similar, reproducible results."
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Positive prompt or editing instruction in Chinese or English. Alibaba recommends at most 4,500 tokens."
+                  },
+                  "resolution": {
+                    "enum": [
+                      "1k",
+                      "2k"
+                    ],
+                    "type": "string",
+                    "default": "1k",
+                    "description": "Output resolution tier. Both tiers produce PNG images."
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "2:3",
+                      "3:2",
+                      "3:4",
+                      "4:3",
+                      "7:9",
+                      "9:7",
+                      "9:16",
+                      "16:9",
+                      "21:9"
+                    ],
+                    "type": "string",
+                    "default": "1:1",
+                    "description": "Output aspect ratio. Exact provider-recommended dimensions are selected automatically."
+                  },
+                  "prompt_extend": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Improve the prompt before generation. Required when thinking mode is enabled."
+                  },
+                  "enable_thinking": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use model reasoning to improve image quality. Requires prompt enhancement."
+                  },
+                  "negative_prompt": {
+                    "type": "string",
+                    "description": "Content, styles, or artifacts to avoid in the output."
+                  },
+                  "prompt_extend_mode": {
+                    "enum": [
+                      "direct",
+                      "agent"
+                    ],
+                    "type": "string",
+                    "default": "direct",
+                    "description": "Direct enhancement is available for every request; agent enhancement is text-to-image only."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alibaba/qwen-image-3/edit": {
+      "post": {
+        "summary": "qwen-image-3/edit (https://docs.higgsfield.ai/docs/models/qwen-image-3/edit.md)",
+        "operationId": "post_alibaba_qwen_image_3_edit",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "enable_thinking"
+                      ],
+                      "properties": {
+                        "enable_thinking": {
+                          "const": true
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "prompt_extend"
+                      ],
+                      "properties": {
+                        "prompt_extend": {
+                          "const": true
+                        }
+                      }
+                    }
+                  }
+                ],
+                "required": [
+                  "prompt",
+                  "image_urls"
+                ],
+                "properties": {
+                  "seed": {
+                    "type": "integer",
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "description": "Optional random seed for similar, reproducible results."
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Positive prompt or editing instruction in Chinese or English. Alibaba recommends at most 4,500 tokens."
+                  },
+                  "image_urls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "maxItems": 3,
+                    "minItems": 1,
+                    "description": "One to three ordered public image URLs used as editing references."
+                  },
+                  "resolution": {
+                    "enum": [
+                      "1k",
+                      "2k"
+                    ],
+                    "type": "string",
+                    "default": "1k",
+                    "description": "Output resolution tier. Both tiers produce PNG images."
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "2:3",
+                      "3:2",
+                      "3:4",
+                      "4:3",
+                      "7:9",
+                      "9:7",
+                      "9:16",
+                      "16:9",
+                      "21:9"
+                    ],
+                    "type": "string",
+                    "default": "1:1",
+                    "description": "Output aspect ratio. Exact provider-recommended dimensions are selected automatically."
+                  },
+                  "prompt_extend": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Improve the prompt before generation. Required when thinking mode is enabled."
+                  },
+                  "enable_thinking": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use model reasoning to improve image quality. Requires prompt enhancement."
+                  },
+                  "negative_prompt": {
+                    "type": "string",
+                    "description": "Content, styles, or artifacts to avoid in the output."
+                  },
+                  "prompt_extend_mode": {
+                    "enum": [
+                      "direct"
+                    ],
+                    "type": "string",
+                    "default": "direct",
+                    "description": "Direct enhancement is available for every request; agent enhancement is text-to-image only."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ideogram/v4.0": {
+      "post": {
+        "summary": "ideogram-4/generate (https://docs.higgsfield.ai/docs/models/ideogram-4/generate.md)",
+        "operationId": "post_ideogram_v4_0",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "title": "Prompt",
+                    "maxLength": 2048,
+                    "minLength": 2,
+                    "description": "Write your prompt here"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "title": "Input image",
+                    "format": "uri"
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "1:2",
+                      "2:1",
+                      "2:3",
+                      "3:2",
+                      "4:5",
+                      "5:4",
+                      "9:16",
+                      "16:9",
+                      "5:8",
+                      "8:5",
+                      "3:4",
+                      "4:3",
+                      "9:22",
+                      "22:9",
+                      "9:23",
+                      "23:9",
+                      "3:8",
+                      "8:3",
+                      "5:12",
+                      "12:5",
+                      "1:3",
+                      "3:1"
+                    ],
+                    "type": "string",
+                    "title": "Aspect ratio",
+                    "default": "1:1"
+                  },
+                  "image_weight": {
+                    "type": "integer",
+                    "title": "Image weight",
+                    "maximum": 100,
+                    "minimum": 1,
+                    "description": "How strongly the output should preserve the input image."
+                  },
+                  "rendering_speed": {
+                    "enum": [
+                      "TURBO",
+                      "DEFAULT",
+                      "QUALITY"
+                    ],
+                    "type": "string",
+                    "title": "Rendering speed",
+                    "default": "DEFAULT"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/z-image/turbo": {
+      "post": {
+        "summary": "z-image-turbo/generate (https://docs.higgsfield.ai/docs/models/z-image-turbo/generate.md)",
+        "operationId": "post_z_image_turbo",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "seed": {
+                    "type": "integer",
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "description": "Optional random seed for similar, reproducible results."
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "maxLength": 800,
+                    "minLength": 1,
+                    "description": "Positive prompt describing the desired content, style, and composition."
+                  },
+                  "resolution": {
+                    "enum": [
+                      "1k",
+                      "2k"
+                    ],
+                    "type": "string",
+                    "default": "1k",
+                    "description": "Output resolution tier. Both tiers produce PNG images."
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "2:3",
+                      "3:2",
+                      "3:4",
+                      "4:3",
+                      "7:9",
+                      "9:7",
+                      "9:16",
+                      "16:9",
+                      "21:9"
+                    ],
+                    "type": "string",
+                    "default": "1:1",
+                    "description": "Output aspect ratio. Exact provider-recommended dimensions are selected automatically."
+                  },
+                  "prompt_extend": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Rewrite and reason over the prompt before generation; this uses the enhanced price tier."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/xai/grok-imagine-image-2.0": {
+      "post": {
+        "summary": "grok-image-2/generate-and-edit (https://docs.higgsfield.ai/docs/models/grok-image-2/generate-and-edit.md)",
+        "operationId": "post_xai_grok_imagine_image_2_0",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "title": "Prompt",
+                    "description": "Write your prompt here"
+                  },
+                  "quality": {
+                    "enum": [
+                      "low",
+                      "medium"
+                    ],
+                    "type": "string",
+                    "title": "Quality",
+                    "default": "medium"
+                  },
+                  "image_urls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "title": "Image",
+                      "format": "uri"
+                    },
+                    "title": "Input Images",
+                    "maxItems": 10,
+                    "minItems": 0
+                  },
+                  "resolution": {
+                    "enum": [
+                      "1k",
+                      "2k"
+                    ],
+                    "type": "string",
+                    "title": "Resolution",
+                    "default": "1k"
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "auto",
+                      "1:1",
+                      "1:2",
+                      "2:1",
+                      "3:2",
+                      "2:3",
+                      "4:3",
+                      "3:4",
+                      "16:9",
+                      "9:16"
+                    ],
+                    "type": "string",
+                    "default": "auto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recraft/v4.1/text-to-image": {
+      "post": {
+        "summary": "recraft-v4-1/text-to-image (https://docs.higgsfield.ai/docs/models/recraft-v4-1/text-to-image.md)",
+        "operationId": "post_recraft_v4_1_text_to_image",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "colors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "rgb"
+                      ],
+                      "properties": {
+                        "rgb": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "maximum": 255,
+                            "minimum": 0
+                          },
+                          "maxItems": 3,
+                          "minItems": 3
+                        }
+                      }
+                    },
+                    "title": "Colors"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "title": "Prompt",
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "description": "Write your prompt here"
+                  },
+                  "resolution": {
+                    "enum": [
+                      "1k"
+                    ],
+                    "type": "string",
+                    "title": "Resolution",
+                    "default": "1k"
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "2:1",
+                      "1:2",
+                      "3:2",
+                      "2:3",
+                      "4:3",
+                      "3:4",
+                      "5:4",
+                      "4:5",
+                      "6:10",
+                      "14:10",
+                      "10:14",
+                      "16:9",
+                      "9:16"
+                    ],
+                    "type": "string",
+                    "title": "Aspect ratio",
+                    "default": "1:1"
+                  },
+                  "output_format": {
+                    "enum": [
+                      "jpg",
+                      "png",
+                      "webp"
+                    ],
+                    "type": "string",
+                    "title": "Output format",
+                    "default": "jpg"
+                  },
+                  "background_color": {
+                    "type": "object",
+                    "title": "Background color",
+                    "required": [
+                      "rgb"
+                    ],
+                    "properties": {
+                      "rgb": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "maximum": 255,
+                          "minimum": 0
+                        },
+                        "maxItems": 3,
+                        "minItems": 3
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recraft/v4.1/pro/text-to-image": {
+      "post": {
+        "summary": "recraft-v4-1-pro/generate (https://docs.higgsfield.ai/docs/models/recraft-v4-1-pro/generate.md)",
+        "operationId": "post_recraft_v4_1_pro_text_to_image",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "colors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "rgb"
+                      ],
+                      "properties": {
+                        "rgb": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "maximum": 255,
+                            "minimum": 0
+                          },
+                          "maxItems": 3,
+                          "minItems": 3
+                        }
+                      }
+                    },
+                    "title": "Colors"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "title": "Prompt",
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "description": "Write your prompt here"
+                  },
+                  "resolution": {
+                    "enum": [
+                      "2k"
+                    ],
+                    "type": "string",
+                    "title": "Resolution",
+                    "default": "2k"
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "2:1",
+                      "1:2",
+                      "3:2",
+                      "2:3",
+                      "4:3",
+                      "3:4",
+                      "5:4",
+                      "4:5",
+                      "6:10",
+                      "14:10",
+                      "10:14",
+                      "16:9",
+                      "9:16"
+                    ],
+                    "type": "string",
+                    "title": "Aspect ratio",
+                    "default": "1:1"
+                  },
+                  "output_format": {
+                    "enum": [
+                      "jpg",
+                      "png",
+                      "webp"
+                    ],
+                    "type": "string",
+                    "title": "Output format",
+                    "default": "jpg"
+                  },
+                  "background_color": {
+                    "type": "object",
+                    "title": "Background color",
+                    "required": [
+                      "rgb"
+                    ],
+                    "properties": {
+                      "rgb": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "maximum": 255,
+                          "minimum": 0
+                        },
+                        "maxItems": 3,
+                        "minItems": 3
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recraft/v4.1/utility/text-to-image": {
+      "post": {
+        "summary": "recraft-v4-1-utility/text-to-image (https://docs.higgsfield.ai/docs/models/recraft-v4-1-utility/text-to-image.md)",
+        "operationId": "post_recraft_v4_1_utility_text_to_image",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "colors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "rgb"
+                      ],
+                      "properties": {
+                        "rgb": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "maximum": 255,
+                            "minimum": 0
+                          },
+                          "maxItems": 3,
+                          "minItems": 3
+                        }
+                      }
+                    },
+                    "title": "Colors"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "title": "Prompt",
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "description": "Write your prompt here"
+                  },
+                  "resolution": {
+                    "enum": [
+                      "1k"
+                    ],
+                    "type": "string",
+                    "title": "Resolution",
+                    "default": "1k"
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "2:1",
+                      "1:2",
+                      "3:2",
+                      "2:3",
+                      "4:3",
+                      "3:4",
+                      "5:4",
+                      "4:5",
+                      "6:10",
+                      "14:10",
+                      "10:14",
+                      "16:9",
+                      "9:16"
+                    ],
+                    "type": "string",
+                    "title": "Aspect ratio",
+                    "default": "1:1"
+                  },
+                  "output_format": {
+                    "enum": [
+                      "jpg",
+                      "png",
+                      "webp"
+                    ],
+                    "type": "string",
+                    "title": "Output format",
+                    "default": "jpg"
+                  },
+                  "background_color": {
+                    "type": "object",
+                    "title": "Background color",
+                    "required": [
+                      "rgb"
+                    ],
+                    "properties": {
+                      "rgb": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "maximum": 255,
+                          "minimum": 0
+                        },
+                        "maxItems": 3,
+                        "minItems": 3
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recraft/v4.1/utility/pro/text-to-image": {
+      "post": {
+        "summary": "recraft-v4-1-utility-pro/text-to-image (https://docs.higgsfield.ai/docs/models/recraft-v4-1-utility-pro/text-to-image.md)",
+        "operationId": "post_recraft_v4_1_utility_pro_text_to_image",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[\\x21-\\x7e]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "colors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "rgb"
+                      ],
+                      "properties": {
+                        "rgb": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "maximum": 255,
+                            "minimum": 0
+                          },
+                          "maxItems": 3,
+                          "minItems": 3
+                        }
+                      }
+                    },
+                    "title": "Colors"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "title": "Prompt",
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "description": "Write your prompt here"
+                  },
+                  "resolution": {
+                    "enum": [
+                      "2k"
+                    ],
+                    "type": "string",
+                    "title": "Resolution",
+                    "default": "2k"
+                  },
+                  "aspect_ratio": {
+                    "enum": [
+                      "1:1",
+                      "2:1",
+                      "1:2",
+                      "3:2",
+                      "2:3",
+                      "4:3",
+                      "3:4",
+                      "5:4",
+                      "4:5",
+                      "6:10",
+                      "14:10",
+                      "10:14",
+                      "16:9",
+                      "9:16"
+                    ],
+                    "type": "string",
+                    "title": "Aspect ratio",
+                    "default": "1:1"
+                  },
+                  "output_format": {
+                    "enum": [
+                      "jpg",
+                      "png",
+                      "webp"
+                    ],
+                    "type": "string",
+                    "title": "Output format",
+                    "default": "jpg"
+                  },
+                  "background_color": {
+                    "type": "object",
+                    "title": "Background color",
+                    "required": [
+                      "rgb"
+                    ],
+                    "properties": {
+                      "rgb": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "maximum": 255,
+                          "minimum": 0
+                        },
+                        "maxItems": 3,
+                        "minItems": 3
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{request_id}/status": {
+      "get": {
+        "summary": "Get request status",
+        "operationId": "get_request_status",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current request state and output, when available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The request does not exist or belongs to another account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Requests"
+        ],
+        "description": "Retrieve the current state and output of a generation request."
+      }
+    },
+    "/files/generate-upload-url": {
+      "post": {
+        "summary": "https://docs.higgsfield.ai/docs/concepts/file-uploads.md",
+        "operationId": "post_files_generate_upload_url",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "content_type": {
+                    "enum": [
+                      "image/jpeg",
+                      "image/jpg",
+                      "image/png",
+                      "image/webp",
+                      "image/gif",
+                      "audio/wav",
+                      "audio/x-wav",
+                      "video/mp4"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "presigned upload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "public_url",
+                    "upload_url"
+                  ],
+                  "properties": {
+                    "public_url": {
+                      "type": "string"
+                    },
+                    "upload_url": {
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "type": "string"
+                    },
+                    "upload_headers": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "authKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Use `Key {api_key_id}:{api_key_secret}`."
+      }
+    },
+    "schemas": {
+      "RequestStatus": {
+        "title": "Request",
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "queued",
+              "in_progress",
+              "nsfw",
+              "failed",
+              "completed",
+              "canceled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "cancel_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaOutput"
+            }
+          },
+          "video": {
+            "$ref": "#/components/schemas/MediaOutput"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/MediaOutput"
+          },
+          "audios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaOutput"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "request_id"
+        ]
+      },
+      "MediaOutput": {
+        "title": "Media output",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "ErrorResponse": {
+        "title": "Error response",
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "authKey": []
+    }
+  ]
+}

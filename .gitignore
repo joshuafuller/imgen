@@ -1,0 +1,27 @@
+/imgen
+/dist/
+/*.png
+/*.jpg
+/*.webp
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*
+
+# Local agent / issue-tracker tooling (kept on disk, not in the repo)
+.agents/
+.beads/
+.beads.gate.lock
+.claude/
+.codex/
+.cursor/
+AGENTS.md
+CLAUDE.md
+bin/
+dist-notes.md
+
+# Internal working notes (kept local)
+docs/dev/

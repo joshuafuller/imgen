@@ -1,0 +1,18 @@
+{
+  "providers": {
+    "localai": {
+      "type": "openai",
+      "base_url": "http://localhost:8080/v1"
+    },
+    "comfyui": {
+      "type": "exec",
+      "command": ["python3", "~/imgen-plugins/comfyui-plugin.py"],
+      "env": {"COMFYUI_URL": "http://127.0.0.1:8188"},
+      "options": {"workflow": "~/workflows/txt2img_api.json", "prompt_node": "6", "seed_node": "3"}
+    },
+    "echo": {
+      "type": "exec",
+      "command": ["python3", "~/imgen-plugins/echo-plugin.py"]
+    }
+  }
+}

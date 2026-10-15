@@ -1,0 +1,63 @@
+version: "2"
+
+run:
+  go: "1.24"
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - gosec
+    - gocyclo
+    - ineffassign
+    - unused
+    - misspell
+    - bodyclose
+    - noctx
+    - errorlint
+    - revive
+  exclusions:
+    presets: []
+    rules:
+      - path: _test\.go
+        linters: [gocyclo, gosec, errcheck]
+        # test helpers read temp files / use fake keys / are long table-style tests
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - os.RemoveAll
+        - (io.ReadCloser).Close
+    gocyclo:
+      min-complexity: 15
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

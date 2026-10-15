@@ -1,0 +1,21 @@
+{
+  "providers": {
+    "gemini": {"type": "gemini", "default_model": "gemini-3.1-flash-image", "deny": ["*-exp*"]},
+    "openai": {"type": "openai", "default_model": "gpt-image-2", "deny": ["dall-e-*"], "options": {"transparent_model": "gpt-image-2.5-flare"}},
+    "codex": {"type": "codex", "default_model": "codex"},
+    "ideogram": {"type": "ideogram", "default_model": "ideogram-3"},
+    "recraft": {"type": "recraft", "default_model": "recraftv3"},
+    "bfl": {"type": "bfl", "default_model": "flux-2-pro"},
+    "replicate": {"type": "replicate", "default_model": "black-forest-labs/flux-1.1-pro"},
+    "fal": {"type": "fal", "default_model": "fal-ai/flux/dev"},
+    "higgsfield": {"type": "higgsfield", "default_model": "higgsfield-ai/soul/v2/standard"}
+  },
+  "styles": {
+    "clean-photo": "clean, noise-free, no film grain, smooth gradients, balanced exposure"
+  },
+  "profiles": {
+    "wallpaper": {"a": "21:9", "resize": "5120x1440:fill", "style": ["clean-photo"]}
+  },
+  "enhance": {"provider": "gemini"},
+  "upscale": {"provider": "replicate", "model": "nightmareai/real-esrgan"}
+}

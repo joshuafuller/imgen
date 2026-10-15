@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the GitHub release and upload assets
+      id-token: write # sign build provenance attestations
+      attestations: write # store build provenance attestations
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      # Built from source at an exact version; the Go module proxy and checksum
+      # database (sum.golang.org) verify the source, so no prebuilt binary is trusted.
+      - name: Install GoReleaser
+        run: go install github.com/goreleaser/goreleaser/v2@v2.18.3
+      - name: Check changelog
+        run: scripts/check-changelog.sh
+      - name: Generate release notes
+        run: scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > dist-notes.md
+      - name: Release
+        run: '"$(go env GOPATH)/bin/goreleaser" release --clean --release-notes dist-notes.md'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*_checksums.txt
