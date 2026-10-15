@@ -241,13 +241,14 @@ func (c *Client) run(ctx context.Context, req provider.Request, onPartial func(p
 	transparent := req.Background == "transparent"
 	req = c.effective(req)
 	var (
-		imgs []provider.Image
-		err  error
+		imgs  []provider.Image
+		usage provider.Usage
+		err   error
 	)
 	if onPartial != nil && c.canStream(req) {
-		imgs, err = c.stream(ctx, req, onPartial)
+		imgs, usage, err = c.stream(ctx, req, onPartial)
 	} else {
-		imgs, err = c.plain(ctx, req, sent)
+		imgs, usage, err = c.plain(ctx, req, sent)
 	}
 	if err != nil {
 		if transparent && strings.Contains(strings.ToLower(err.Error()), "transparent") {
@@ -255,7 +256,7 @@ func (c *Client) run(ctx context.Context, req provider.Request, onPartial func(p
 		}
 		return nil, err
 	}
-	res := &provider.Result{Model: req.Model, Images: imgs}
+	res := &provider.Result{Model: req.Model, Images: imgs, Usage: c.billedUsage(usage)}
 	if transparent {
 		if err := c.checkAlpha(req.Model, res.Images); err != nil {
 			return nil, err
@@ -294,25 +295,79 @@ func (c *Client) newRequest(ctx context.Context, req provider.Request) func() (*
 	}
 }
 
-// plain runs the call without streaming and returns the images. sent
-// counts each time the request was sent.
-func (c *Client) plain(ctx context.Context, req provider.Request, sent *httpx.Tally) ([]provider.Image, error) {
+// plain runs the call without streaming and returns the images and the
+// usage. sent counts each time the request was sent.
+func (c *Client) plain(ctx context.Context, req provider.Request, sent *httpx.Tally) ([]provider.Image, provider.Usage, error) {
 	body, err := c.do(c.newRequest(ctx, req), c.paidPolicy(sent))
 	if err != nil {
-		return nil, err
+		return nil, provider.Usage{}, err
 	}
 	return c.parseImages(ctx, body, mimeFor(req.Format))
 }
 
-// parseImages reads an ImagesResponse body.
-func (c *Client) parseImages(ctx context.Context, body []byte, mime string) ([]provider.Image, error) {
+// parseImages reads an ImagesResponse body: the images and the usage.
+func (c *Client) parseImages(ctx context.Context, body []byte, mime string) ([]provider.Image, provider.Usage, error) {
 	var parsed struct {
-		Data []respImage `json:"data"`
+		Data  []respImage `json:"data"`
+		Usage *apiUsage   `json:"usage"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("openai: decode response: %w", err)
+		return nil, provider.Usage{}, fmt.Errorf("openai: decode response: %w", err)
 	}
-	return c.collect(ctx, parsed.Data, mime)
+	imgs, err := c.collect(ctx, parsed.Data, mime)
+	if err != nil {
+		return nil, provider.Usage{}, err
+	}
+	return imgs, parsed.Usage.usage(), nil
+}
+
+// apiUsage is the usage object of an images response or of a completed
+// stream event.
+type apiUsage struct {
+	InputTokens   *int64        `json:"input_tokens"`
+	OutputTokens  *int64        `json:"output_tokens"`
+	InputDetails  *tokenDetails `json:"input_tokens_details"`
+	OutputDetails *tokenDetails `json:"output_tokens_details"`
+}
+
+type tokenDetails struct {
+	TextTokens  int64 `json:"text_tokens"`
+	ImageTokens int64 `json:"image_tokens"`
+}
+
+// usage converts a. A missing object or total is unknown usage. Tokens the
+// details do not explain count as image tokens, the dearer kind, so the
+// price is never low. With no output details (always so in a stream), any
+// text output is unreported.
+func (a *apiUsage) usage() provider.Usage {
+	if a == nil || a.InputTokens == nil || a.OutputTokens == nil {
+		return provider.Usage{}
+	}
+	u := provider.Usage{Known: true, TextOutUnreported: a.OutputDetails == nil}
+	u.TextIn, u.ImageIn = split(*a.InputTokens, a.InputDetails)
+	u.TextOut, u.ImageOut = split(*a.OutputTokens, a.OutputDetails)
+	return u
+}
+
+// split divides total into text and image tokens. The image part is at
+// least total minus the text part.
+func split(total int64, d *tokenDetails) (text, image int64) {
+	total = max(total, 0)
+	if d == nil {
+		return 0, total
+	}
+	text = max(d.TextTokens, 0)
+	return text, max(d.ImageTokens, total-text, 0)
+}
+
+// billedUsage is u when the call went to the official API, whose usage
+// prices the call. A custom endpoint's usage is not trusted: its call
+// keeps the estimate.
+func (c *Client) billedUsage(u provider.Usage) provider.Usage {
+	if !httpx.OfficialHost(c.base(), defaultHost) {
+		return provider.Usage{}
+	}
+	return u
 }
 
 type respImage struct {

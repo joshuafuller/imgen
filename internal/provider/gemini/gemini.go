@@ -213,6 +213,50 @@ type response struct {
 			Parts []part `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
+	UsageMetadata *usageMetadata `json:"usageMetadata"`
+}
+
+// usageMetadata is the token count of one generateContent response.
+// Thinking tokens are outside candidatesTokenCount.
+type usageMetadata struct {
+	PromptTokenCount        *int64          `json:"promptTokenCount"`
+	CandidatesTokenCount    *int64          `json:"candidatesTokenCount"`
+	ThoughtsTokenCount      int64           `json:"thoughtsTokenCount"`
+	PromptTokensDetails     []modalityCount `json:"promptTokensDetails"`
+	CandidatesTokensDetails []modalityCount `json:"candidatesTokensDetails"`
+}
+
+type modalityCount struct {
+	Modality   string `json:"modality"`
+	TokenCount int64  `json:"tokenCount"`
+}
+
+// usage converts m. A missing object or count is unknown usage. Tokens the
+// details do not explain count as image tokens, the dearer kind, so the
+// price is never low.
+func (m *usageMetadata) usage() provider.Usage {
+	if m == nil || m.PromptTokenCount == nil || m.CandidatesTokenCount == nil {
+		return provider.Usage{}
+	}
+	u := provider.Usage{Known: true}
+	u.TextIn, u.ImageIn = split(*m.PromptTokenCount, m.PromptTokensDetails)
+	u.TextOut, u.ImageOut = split(*m.CandidatesTokenCount, m.CandidatesTokensDetails)
+	u.TextOut += max(m.ThoughtsTokenCount, 0)
+	return u
+}
+
+// split divides total into text and image tokens by modality. The image
+// part is at least total minus the text part.
+func split(total int64, details []modalityCount) (text, image int64) {
+	for _, d := range details {
+		switch strings.ToUpper(d.Modality) {
+		case "TEXT":
+			text += max(d.TokenCount, 0)
+		case "IMAGE":
+			image += max(d.TokenCount, 0)
+		}
+	}
+	return text, max(image, max(total, 0)-text, 0)
 }
 
 // buildBody assembles the generateContent request body.
@@ -268,7 +312,7 @@ func partImage(p part) (provider.Image, bool, error) {
 
 // parseResponse converts a decoded response into a Result.
 func parseResponse(resp *response, model string) (*provider.Result, error) {
-	res := &provider.Result{Model: resp.ModelVersion}
+	res := &provider.Result{Model: resp.ModelVersion, Usage: resp.UsageMetadata.usage()}
 	if res.Model == "" {
 		res.Model = model
 	}
@@ -333,11 +377,23 @@ func (c *Client) Generate(ctx context.Context, r provider.Request) (*provider.Re
 	if err == nil {
 		for _, res := range results[1:] {
 			results[0].Images = append(results[0].Images, res.Images...)
+			results[0].Usage = results[0].Usage.Add(res.Usage)
 		}
+		results[0].Usage = c.billedUsage(results[0].Usage)
 	}
 	// One tally for the call: the most sends of one request, rate limited
 	// only when every request was.
 	return provider.Attempted(results[0], httpx.Combine(sents...), err)
+}
+
+// billedUsage is u when the call went to the official API, whose usage
+// prices the call. A custom endpoint's usage is not trusted: its call
+// keeps the estimate.
+func (c *Client) billedUsage(u provider.Usage) provider.Usage {
+	if !httpx.OfficialHost(c.BaseURL, defaultHost) {
+		return provider.Usage{}
+	}
+	return u
 }
 
 // generateOne runs one generateContent request; sent counts each time it is

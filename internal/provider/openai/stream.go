@@ -146,7 +146,7 @@ const retryHint = "Retry, or use --no-stream"
 // the stream options (an organization that is not verified) is followed by
 // the plain call, because the API controls that text too; the refusal is
 // remembered, so the next run makes the plain call.
-func (c *Client) stream(ctx context.Context, req provider.Request, onPartial func(provider.Image)) ([]provider.Image, error) {
+func (c *Client) stream(ctx context.Context, req provider.Request, onPartial func(provider.Image)) ([]provider.Image, provider.Usage, error) {
 	sreq := req
 	sreq.Extra = maps.Clone(req.Extra)
 	if sreq.Extra == nil {
@@ -156,7 +156,7 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 	sreq.Extra["partial_images"] = streamPartials
 	r, err := c.newRequest(ctx, sreq)()
 	if err != nil {
-		return nil, err
+		return nil, provider.Usage{}, err
 	}
 	r.Header.Set("Accept", "text/event-stream")
 	// One attempt, not httpx.Send. With no Idempotency-Key header, net/http
@@ -164,14 +164,14 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 	resp, err := c.httpc().Do(r)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("openai: request: %w", ctx.Err())
+			return nil, provider.Usage{}, fmt.Errorf("openai: request: %w", ctx.Err())
 		}
-		return nil, fmt.Errorf("openai: request: %w. %s", err, retryHint)
+		return nil, provider.Usage{}, fmt.Errorf("openai: request: %w. %s", err, retryHint)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, httpx.DefaultPolicy().MaxBytes))
-		return nil, c.streamStatusError(resp, body)
+		return nil, provider.Usage{}, c.streamStatusError(resp, body)
 	}
 	maxBytes := c.retryPolicy(true).MaxBytes
 	format := mimeFor(req.Format)
@@ -179,7 +179,7 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 		// The server ignored stream and sent a plain ImagesResponse.
 		body, err := readCapped(resp.Body, maxBytes)
 		if err != nil {
-			return nil, fmt.Errorf("openai: request: %w", err)
+			return nil, provider.Usage{}, fmt.Errorf("openai: request: %w", err)
 		}
 		return c.parseImages(ctx, body, format)
 	}
@@ -247,16 +247,18 @@ func (c *capReader) Read(p []byte) (int, error) {
 // The error shape is not in the OpenAPI document; it matches the API's
 // other streams.
 type streamEvent struct {
-	Type  string `json:"type"`
-	B64   string `json:"b64_json"`
+	Type  string    `json:"type"`
+	B64   string    `json:"b64_json"`
+	Usage *apiUsage `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
 // readEvents reads server-sent events until the completed event and returns
-// its image. The whole stream, and so each event, is capped at maxBytes.
-func (c *Client) readEvents(ctx context.Context, body io.Reader, maxBytes int64, format string, onPartial func(provider.Image)) ([]provider.Image, error) {
+// its image and usage. The whole stream, and so each event, is capped at
+// maxBytes.
+func (c *Client) readEvents(ctx context.Context, body io.Reader, maxBytes int64, format string, onPartial func(provider.Image)) ([]provider.Image, provider.Usage, error) {
 	sc := bufio.NewScanner(&capReader{r: body, left: maxBytes})
 	sc.Buffer(make([]byte, 0, 64<<10), int(min(maxBytes+1, 1<<31-1)))
 	var name string
@@ -269,9 +271,9 @@ func (c *Client) readEvents(ctx context.Context, body io.Reader, maxBytes int64,
 				name = ""
 				continue
 			}
-			imgs, done, err := c.event(ctx, name, data.Bytes(), format, onPartial)
+			imgs, usage, done, err := c.event(ctx, name, data.Bytes(), format, onPartial)
 			if err != nil || done {
-				return imgs, err
+				return imgs, usage, err
 			}
 			name = ""
 			data.Reset()
@@ -294,19 +296,20 @@ func (c *Client) readEvents(ctx context.Context, body io.Reader, maxBytes int64,
 		if errors.Is(err, bufio.ErrTooLong) {
 			err = fmt.Errorf("%w: a stream event exceeds %d bytes", httpx.ErrTooLarge, maxBytes)
 		}
-		return nil, fmt.Errorf("openai: stream: %w", err)
+		return nil, provider.Usage{}, fmt.Errorf("openai: stream: %w", err)
 	}
 	if ctx.Err() != nil {
-		return nil, fmt.Errorf("openai: stream: %w", ctx.Err())
+		return nil, provider.Usage{}, fmt.Errorf("openai: stream: %w", ctx.Err())
 	}
-	return nil, errStreamEnded
+	return nil, provider.Usage{}, errStreamEnded
 }
 
-// event handles one event. done is true when it carried the final image.
-func (c *Client) event(ctx context.Context, name string, data []byte, format string, onPartial func(provider.Image)) (imgs []provider.Image, done bool, err error) {
+// event handles one event. done is true when it carried the final image,
+// and usage is then that event's usage.
+func (c *Client) event(ctx context.Context, name string, data []byte, format string, onPartial func(provider.Image)) (imgs []provider.Image, usage provider.Usage, done bool, err error) {
 	var ev streamEvent
 	if json.Unmarshal(data, &ev) != nil {
-		return nil, false, nil // e.g. a "[DONE]" marker
+		return nil, provider.Usage{}, false, nil // e.g. a "[DONE]" marker
 	}
 	if ev.Type == "" {
 		ev.Type = name
@@ -317,17 +320,20 @@ func (c *Client) event(ctx context.Context, name string, data []byte, format str
 		if ev.Error != nil && ev.Error.Message != "" {
 			msg = ev.Error.Message
 		}
-		return nil, true, fmt.Errorf("%w: %s", errAPI, msg)
+		return nil, provider.Usage{}, true, fmt.Errorf("%w: %s", errAPI, msg)
 	case strings.HasSuffix(ev.Type, ".partial_image"):
 		if img, ok := partialImage(ev.B64); ok {
 			onPartial(img)
 		}
-		return nil, false, nil
+		return nil, provider.Usage{}, false, nil
 	case strings.HasSuffix(ev.Type, ".completed"):
 		imgs, err := c.collect(ctx, []respImage{{B64: ev.B64}}, format)
-		return imgs, true, err
+		if err != nil {
+			return nil, provider.Usage{}, true, err
+		}
+		return imgs, ev.Usage.usage(), true, nil
 	}
-	return nil, false, nil
+	return nil, provider.Usage{}, false, nil
 }
 
 // partialImage decodes a partial and checks its header (type, pixel limit)

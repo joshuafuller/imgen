@@ -94,6 +94,35 @@ type Result struct {
 	// for information: that API does not bill a 429, so the call costs one
 	// estimate however many attempts it took.
 	Attempts int
+	// Usage is the token count the API reported for the call, which
+	// prices it after the fact. Its zero value means none was reported.
+	Usage Usage
+}
+
+// Usage is the token count an API reported for a call, summed over the
+// call's paid requests. Pricing turns it into the cost of the call.
+type Usage struct {
+	// Known is true when every paid request of the call reported its
+	// usage. When it is false, the call is priced by its estimate.
+	Known    bool
+	TextIn   int64 // text input tokens (the prompt)
+	ImageIn  int64 // image input tokens (edit and reference images)
+	TextOut  int64 // text output tokens, thinking included
+	ImageOut int64 // image output tokens
+	// TextOutUnreported is true when the API did not split its output
+	// tokens, so text output (such as reasoning) may be missing from
+	// TextOut, as in OpenAI's streamed usage.
+	TextOutUnreported bool
+}
+
+// Add sums two usages. The sum is known only when both are.
+func (u Usage) Add(v Usage) Usage {
+	return Usage{
+		Known:  u.Known && v.Known,
+		TextIn: u.TextIn + v.TextIn, ImageIn: u.ImageIn + v.ImageIn,
+		TextOut: u.TextOut + v.TextOut, ImageOut: u.ImageOut + v.ImageOut,
+		TextOutUnreported: u.TextOutUnreported || v.TextOutUnreported,
+	}
 }
 
 // AttemptsError is the error of a call whose paid request was sent more
