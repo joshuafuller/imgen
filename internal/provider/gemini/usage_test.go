@@ -32,6 +32,11 @@ func TestUsageMetadata(t *testing.T) {
 		{"details explain too little", `{"promptTokenCount":50,"candidatesTokenCount":1300,
 			"promptTokensDetails":[{"modality":"TEXT","tokenCount":20}],"candidatesTokensDetails":[{"modality":"TEXT","tokenCount":10}]}`,
 			provider.Usage{Known: true, TextIn: 20, ImageIn: 30, TextOut: 10, ImageOut: 1290}},
+		// A real gemini-3.1-flash-image answer (2026-10-15): the image is
+		// named at its published 1120 tokens; the 414 unnamed are thinking.
+		{"image named, the rest is thinking", `{"promptTokenCount":35,"candidatesTokenCount":1534,"totalTokenCount":1569,
+			"promptTokensDetails":[{"modality":"TEXT","tokenCount":35}],"candidatesTokensDetails":[{"modality":"IMAGE","tokenCount":1120}]}`,
+			provider.Usage{Known: true, TextIn: 35, TextOut: 414, ImageOut: 1120}},
 		{"negative", `{"promptTokenCount":-1,"candidatesTokenCount":-1,"thoughtsTokenCount":-7}`, provider.Usage{Known: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

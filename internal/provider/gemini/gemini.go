@@ -217,7 +217,8 @@ type response struct {
 }
 
 // usageMetadata is the token count of one generateContent response.
-// Thinking tokens are outside candidatesTokenCount.
+// Thinking is in thoughtsTokenCount, or in candidatesTokenCount with no
+// modality.
 type usageMetadata struct {
 	PromptTokenCount        *int64          `json:"promptTokenCount"`
 	CandidatesTokenCount    *int64          `json:"candidatesTokenCount"`
@@ -231,9 +232,8 @@ type modalityCount struct {
 	TokenCount int64  `json:"tokenCount"`
 }
 
-// usage converts m. A missing object or count is unknown usage. Tokens the
-// details do not explain count as image tokens, the dearer kind, so the
-// price is never low.
+// usage converts m. A missing object or count is unknown usage. Unnamed
+// tokens are divided by split.
 func (m *usageMetadata) usage() provider.Usage {
 	if m == nil || m.PromptTokenCount == nil || m.CandidatesTokenCount == nil {
 		return provider.Usage{}
@@ -245,18 +245,30 @@ func (m *usageMetadata) usage() provider.Usage {
 	return u
 }
 
-// split divides total into text and image tokens by modality. The image
-// part is at least total minus the text part.
+// split divides total into text and image tokens by modality. Tokens the
+// details do not name are text when the details count the image tokens:
+// Gemini lists an image at its published size (1120 tokens for 1K) and
+// leaves its thinking unnamed. With no image count, they are image tokens,
+// the dearer kind, so the price is never low.
 func split(total int64, details []modalityCount) (text, image int64) {
+	counted := false
 	for _, d := range details {
 		switch strings.ToUpper(d.Modality) {
 		case "TEXT":
 			text += max(d.TokenCount, 0)
 		case "IMAGE":
 			image += max(d.TokenCount, 0)
+			counted = true
 		}
 	}
-	return text, max(image, max(total, 0)-text, 0)
+	rest := max(total, 0) - text - image
+	switch {
+	case rest <= 0:
+		return text, image
+	case counted:
+		return text + rest, image
+	}
+	return text, image + rest
 }
 
 // buildBody assembles the generateContent request body.
