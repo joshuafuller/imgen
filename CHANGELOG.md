@@ -33,10 +33,17 @@ painting on OpenAI, and `imgen qr` for QR code art that still scans.
 
 ### Fixed
 
+- **Build:** The docs smoke test runs against a local mock by default, free and offline; `--live` uses the real APIs. ([`b2b4f12`](https://github.com/joshuafuller/imgen/commit/b2b4f12c9ff9deba0a6e6646c4b4c325c1f4d135)) ([`3c3c6fe`](https://github.com/joshuafuller/imgen/commit/3c3c6fef933e9721c7d3dfcf0a73c3381a32f1e9))
+- **CLI:** `--enhance` uses `GEMINI_BASE_URL` and `OPENAI_BASE_URL` like the rest of imgen, and `-f svg` no longer reports a false format note. ([`4a6bfd6`](https://github.com/joshuafuller/imgen/commit/4a6bfd652073d88d8e0c8a904659ae9f212d7465))
 - **Build:** The docs smoke test now covers piped examples and `imgen qr`. ([`d599117`](https://github.com/joshuafuller/imgen/commit/d599117a05bf45c92458be999f2f3db53bbdbe5d)) ([`5935689`](https://github.com/joshuafuller/imgen/commit/5935689bf6ac3f0295849143c643a3f51b9be960)) ([`fb0ee02`](https://github.com/joshuafuller/imgen/commit/fb0ee02f1d8fbc506cd2b2dadd092d276a2d29ce))
 
 ### Security
 
+- **CLI:** Provider text is stripped of terminal control codes and bidi characters before it reaches the screen. ([`42351cc`](https://github.com/joshuafuller/imgen/commit/42351cc4613536338a24f3cddb43c5001b67f65d))
+- **CLI:** Terminal previews send only PNGs that imgen decoded and re-encoded itself. ([`7980a1f`](https://github.com/joshuafuller/imgen/commit/7980a1ffb942449b0b313873b51430dcad90c66d))
+- **CLI:** The terminal capability query runs only at interactive startup, so it never swallows typed keys. ([`74528d3`](https://github.com/joshuafuller/imgen/commit/74528d38384462f2b6c24918bd2ce51bbb692721)) ([`e77eb37`](https://github.com/joshuafuller/imgen/commit/e77eb374695da9c007707c11746eec1fcc04de48))
+- **CLI:** Terminal checks use a real TTY test, so `/dev/null` is not treated as a terminal. ([`734b7c6`](https://github.com/joshuafuller/imgen/commit/734b7c6a2dfc84f0378189b031f277931f095345))
+- **CLI:** `imgen qr` requires a minimum contrast before a result passes. ([`324d5b7`](https://github.com/joshuafuller/imgen/commit/324d5b7bf2cbf3a2b057197312e48489f13396c2))
 - **MCP:** The server refuses `-` for images, mask and output directory, so a tool call can never read stdin or write stdout, which carry the protocol. ([`04bf559`](https://github.com/joshuafuller/imgen/commit/04bf5593c57af3c2ef18fcf78821d05c4b8b8d4d))
 - **CLI:** Streamed partial images are priced before the budget hold, so spend is never undercounted. ([`36c20da`](https://github.com/joshuafuller/imgen/commit/36c20daf53e91653e4f8213ec37d957c2994f492)) ([`5cc9c17`](https://github.com/joshuafuller/imgen/commit/5cc9c1745c22d16fd3d744c1a8e44eda6f9d3ed9))
 - **Providers:** Every streamed partial is size-checked before it is decoded, and a refusal to stream is remembered instead of retried. ([`47b2ffb`](https://github.com/joshuafuller/imgen/commit/47b2ffbcff368662e49607c96fb9e102b48f952a)) ([`5cc9c17`](https://github.com/joshuafuller/imgen/commit/5cc9c1745c22d16fd3d744c1a8e44eda6f9d3ed9))
