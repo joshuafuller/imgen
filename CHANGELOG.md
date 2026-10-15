@@ -8,10 +8,20 @@ Every entry links to the commit that made the change.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-15
+
+Nine new worked examples, and a money-safety rule: a request that can bill is never sent twice.
+
+**Full changelog:** [v0.5.0...v0.5.1](https://github.com/joshuafuller/imgen/compare/v0.5.0...v0.5.1)
+
 ### Added
 
-- **Docs:** `examples/sprite/`: animate a game character into a seamless sprite loop, in pixel-art or smooth style, with a sprite sheet and a TexturePacker-style atlas.
-- **Docs:** README badges.
+- **Docs:** Animated game characters: a seamless sprite walk loop in pixel-art or smooth style, with a sheet and an atlas. ([`45e408d`](https://github.com/joshuafuller/imgen/commit/45e408df3d413991825a345d36a5b19bca1fe7a8))
+- **Docs:** Social cards from Markdown posts and video thumbnails, both with crisp real-text titles. ([`0d90665`](https://github.com/joshuafuller/imgen/commit/0d9066569f7e62b75092866be641bc6f4c686e9a))
+- **Docs:** Wallpapers for every screen, tabletop tokens and QR posters. ([`e6cc415`](https://github.com/joshuafuller/imgen/commit/e6cc41507a03d1252fc23ced5cca4dd65dd05205))
+- **Docs:** A game asset kit: an icon sheet sliced into icons, a seamless tile, portraits and an atlas. ([`d967aa5`](https://github.com/joshuafuller/imgen/commit/d967aa5940db5cad41148fe854d610f8880318ec))
+- **Docs:** An app icon factory for every platform and a brand kit from one logo. ([`3a7856e`](https://github.com/joshuafuller/imgen/commit/3a7856e6243ef867488e316468a50439c080316d))
+- **Docs:** README badges, an animated character in the gallery, and an examples index. ([`6fcecd4`](https://github.com/joshuafuller/imgen/commit/6fcecd4dc3d750f738eff8ee1625de2071cff1be))
 
 ### Security
 
@@ -94,6 +104,7 @@ server for AI agents. Every documented example is run against the real APIs befo
 - **MCP:** Only API providers by default, with caps on images, calls, spend, disk, request size and time; provider text is returned as untrusted data. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 - **Docs:** `SECURITY.md` and `docs/security.md` describe the threat model; ten independent review reports are in `docs/security/reviews/`. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 
-[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/joshuafuller/imgen/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/joshuafuller/imgen/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/joshuafuller/imgen/releases/tag/v0.4.0
