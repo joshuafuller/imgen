@@ -8,6 +8,17 @@ Every entry links to the commit that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- **CLI:** `--pixel H` turns any image into real pixel art H pixels tall, in 24 colors (`--colors`) or the colors of an image (`--palette`). ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
+- **Docs:** An images-only walk cycle: one hero, one turnaround, one pose per call, and `frames.py` to line the frames up. ([`9509ce1`](https://github.com/joshuafuller/imgen/commit/9509ce170b1bf406983312b1e0d378bccd30794d))
+
+### Changed
+
+- **CLI:** `--remove-bg` asks for a magenta screen, which games rarely use; `--remove-bg=green` keeps the green one. ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
+- **CLI:** With `--remove-bg`, a cutout given as `-i` is put on the screen color before it is sent. ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
+- **CLI:** After `--pixel`, `--resize` keeps the pixels sharp. ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
+
 ## [0.5.3] - 2026-10-15
 
 `IMGEN_BUDGET` now holds a call's top price before the call and counts the tokens that the API reports after it, so a large OpenAI image or an edit can no longer go past the limit unseen.
