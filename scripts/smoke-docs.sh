@@ -1,64 +1,163 @@
 #!/usr/bin/env bash
-# smoke-docs.sh: run every documented imgen example for real and check the output.
+# smoke-docs.sh: run every documented imgen example and check the output.
 #
 # It extracts each `imgen ...` command from the sh/bash/shell blocks in README.md
-# and docs/*.md, classifies it, prices the paid ones with --dry-run, stops if the
-# total is over the cap, then runs the pages in order and checks every image.
+# and docs/*.md, classifies it, runs the pages in order and checks every image.
 #
-# Usage: scripts/smoke-docs.sh [--estimate] [--max-usd N] [--out DIR] [--reuse DIR]
-#   --estimate   plan and price only; make no paid call
-#   --max-usd N  refuse to run when the estimate is over N (default 6)
-#   --out DIR    run folder (default: $SMOKE_OUT or $TMPDIR/imgen-smoke/run-<time>)
-#   --reuse DIR  copy the result of each PASS step of an earlier run whose
-#                command is unchanged, instead of paying for it again
+# Mock mode (the default) costs nothing. scripts/smoke-mock.py stands in for
+# the Gemini, OpenAI, Recraft and Replicate APIs, every key is a dummy, and the
+# run happens in a network namespace with no route out (unshare -rn), so no
+# real API can be reached. Codex and the other providers run with --dry-run.
+# --live calls the real Gemini, OpenAI and Codex APIs: it prices the paid
+# examples with --dry-run first and stops if the total is over the cap.
+#
+# Usage: scripts/smoke-docs.sh [--live [--estimate] [--max-usd N] [--reuse DIR]] [--out DIR]
+#   --live       call the real APIs (paid, about $4)
+#   --estimate   with --live: plan and price only; make no paid call
+#   --max-usd N  with --live: refuse to run when the estimate is over N (default 6)
+#   --out DIR    run folder (default: $SMOKE_OUT or a new $TMPDIR/imgen-smoke.XXXXXX)
+#   --reuse DIR  with --live: copy the result of each PASS step of an earlier
+#                live run whose command is unchanged, instead of paying again
 #
 # Results: <run>/summary.md (PASS/FAIL/SKIP per command), <run>/manifest.tsv,
 # <run>/pages/<page>/ (outputs, plus .smoke/<step>.{out,err,rc}),
-# <run>/review/ (small copies of each image for a person to look at).
-# Exit 0 when nothing failed, 1 on any FAIL, 2 on a usage or setup error,
-# 3 when the estimate is over the cap.
+# <run>/review/ (small copies of each image for a person to look at),
+# <run>/mock/requests.jsonl (mock mode: one line per request the mock served).
+# Exit 0 when nothing failed, 1 on any FAIL or failed mock check, 2 on a usage
+# or setup error, 3 when the estimate is over the cap.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SELF="$ROOT/scripts/$(basename "${BASH_SOURCE[0]}")"
+ARGS=("$@")
+MODE=mock
 MAX_USD=6
 OUT="${SMOKE_OUT:-}"
 REUSE=""
 ESTIMATE=0
+PRICED=0
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-	--estimate) ESTIMATE=1 ;;
-	--max-usd) MAX_USD="${2:?--max-usd needs a value}"; shift ;;
+	--live) MODE=live ;;
+	--estimate) ESTIMATE=1 PRICED=1 ;;
+	--max-usd) MAX_USD="${2:?--max-usd needs a value}" PRICED=1; shift ;;
 	--out) OUT="${2:?--out needs a folder}"; shift ;;
-	--reuse) REUSE="$(cd "${2:?--reuse needs a folder}" && pwd)"; shift ;;
-	-h | --help) sed -n '2,20p' "$0"; exit 0 ;;
+	--reuse) REUSE="$(cd "${2:?--reuse needs a folder}" && pwd)" PRICED=1; shift ;;
+	-h | --help) sed -n '2,27p' "$0"; exit 0 ;;
 	*) echo "smoke-docs: unknown argument $1" >&2; exit 2 ;;
 	esac
 	shift
 done
+if [ "$MODE" = mock ] && [ "$PRICED" = 1 ]; then
+	echo "smoke-docs: --estimate, --max-usd and --reuse are for a paid run; add --live (mock mode is free)" >&2
+	exit 2
+fi
+export SMOKE_T0="${SMOKE_T0:-$(date +%s)}"
 
 for tool in go python3 jq; do
 	command -v "$tool" >/dev/null || { echo "smoke-docs: $tool is required" >&2; exit 2; }
 done
 python3 -I -c 'import PIL' 2>/dev/null || { echo "smoke-docs: python3 needs Pillow (PIL)" >&2; exit 2; }
 
-if [ -z "$OUT" ]; then
-	# A fresh private folder: never reuse a predictable path in a shared /tmp.
-	OUT="$(mktemp -d "${TMPDIR:-/tmp}/imgen-smoke.XXXXXX")"
+# Mock mode runs twice: this first pass builds the binary and warms the uv
+# cache with the network up, then runs the script again in a network namespace
+# with only loopback. SMOKE_NETNS carries the run folder into that second pass.
+if [ -z "${SMOKE_NETNS:-}" ]; then
+	if [ "$MODE" = mock ]; then
+		echo "== mode: mock (free; a local mock replaces the APIs, no real API is contacted)"
+	else
+		echo "== mode: live (real APIs, paid; cap \$$MAX_USD)"
+	fi
+	if [ -z "$OUT" ]; then
+		# A fresh private folder: never reuse a predictable path in a shared /tmp.
+		OUT="$(mktemp -d "${TMPDIR:-/tmp}/imgen-smoke.XXXXXX")"
+	fi
+	mkdir -p "$OUT"
+	chmod 700 "$OUT"
+	RUN="$(cd "$OUT" && pwd)"
+	mkdir -p "$RUN/bin" "$RUN/state" "$RUN/cache" "$RUN/pages" "$RUN/tools" "$RUN/fixtures" "$RUN/review"
+	# Pin the binary under test, so a parallel `go install` cannot change it mid-run.
+	(cd "$ROOT" && go build -o "$RUN/bin/imgen" ./cmd/imgen)
+	if [ "$MODE" = mock ]; then
+		command -v uv >/dev/null || { echo "smoke-docs: mock mode needs uv" >&2; exit 2; }
+		uv run --offline --quiet --with pillow python -I -c 'import PIL' 2>/dev/null ||
+			uv run --quiet --with pillow python -I -c 'import PIL' || { echo "smoke-docs: uv cannot provide Pillow" >&2; exit 2; }
+		if command -v ip >/dev/null && unshare -rn true 2>/dev/null; then
+			export SMOKE_NETNS="$RUN"
+			# shellcheck disable=SC2016 # the inner bash expands $0 and $@
+			exec unshare -rn bash -c 'ip link set lo up && exec bash "$0" "$@"' "$SELF" "${ARGS[@]}"
+		fi
+		echo "smoke-docs: WARNING: no network namespace (unshare -rn failed); only the dummy keys keep this run free" >&2
+	fi
+else
+	RUN="$SMOKE_NETNS"
+	if ip route show | grep -q . || ip -6 route show | grep -q default; then
+		echo "smoke-docs: the network namespace has a route out; refusing to run" >&2
+		exit 2
+	fi
+	echo "== network: isolated (loopback only; any real API call fails)"
 fi
-mkdir -p "$OUT"
-chmod 700 "$OUT"
-RUN="$(cd "$OUT" && pwd)"
-mkdir -p "$RUN/bin" "$RUN/state" "$RUN/cache" "$RUN/pages" "$RUN/tools" "$RUN/fixtures" "$RUN/review"
-
-# Pin the binary under test, so a parallel `go install` cannot change it mid-run.
-(cd "$ROOT" && go build -o "$RUN/bin/imgen" ./cmd/imgen)
 export PATH="$RUN/bin:$PATH"
+
+if [ "$MODE" = mock ]; then
+	# No key, rules, env file or IMGEN_* setting of the caller's reaches this
+	# run. The env file fills in unset variables, so it is replaced, not unset.
+	while IFS= read -r v; do
+		case "$v" in
+		IMGEN_* | *_API_KEY | *_API_SECRET | *_API_TOKEN | FAL_KEY | *_BASE_URL) unset "$v" ;;
+		esac
+	done < <(compgen -e)
+	mkdir -p "$RUN/mock/codex-home"
+	: >"$RUN/mock/env"
+	chmod 600 "$RUN/mock/env"
+	export IMGEN_ENV_FILE="$RUN/mock/env" CODEX_HOME="$RUN/mock/codex-home"
+	# Codex has no mock (it would use the ChatGPT login). This stand-in records
+	# every call and fails it, so doctor reports codex as not set up.
+	cat >"$RUN/bin/codex" <<'SH'
+#!/bin/sh
+echo "$*" >>"$SMOKE_RUN/mock/codex-calls.log"
+echo "smoke-docs: codex has no mock" >&2
+exit 1
+SH
+	chmod +x "$RUN/bin/codex"
+	rm -f "$RUN/mock/port"
+	uv run --offline --quiet --with pillow python -I "$ROOT/scripts/smoke-mock.py" \
+		--port-file "$RUN/mock/port" --log "$RUN/mock/requests.jsonl" 2>"$RUN/mock/server.log" &
+	MOCK_PID=$!
+	trap 'kill "$MOCK_PID" 2>/dev/null || true' EXIT
+	for _ in $(seq 150); do
+		if [ -s "$RUN/mock/port" ] || ! kill -0 "$MOCK_PID" 2>/dev/null; then break; fi
+		sleep 0.1
+	done
+	[ -s "$RUN/mock/port" ] || { echo "smoke-docs: the mock did not start; see $RUN/mock/server.log" >&2; exit 2; }
+	MOCK="http://127.0.0.1:$(cat "$RUN/mock/port")"
+	# --enhance reads only the rules file's base_url, so the built-in instances
+	# get one there too, besides GEMINI_BASE_URL and OPENAI_BASE_URL.
+	cat >"$RUN/mock/rules.json" <<JSON
+{"providers": {
+  "gemini": {"base_url": "$MOCK/v1beta"},
+  "openai": {"base_url": "$MOCK/v1", "api_key_env": "OPENAI_API_KEY"},
+  "recraft": {"base_url": "$MOCK/recraft"},
+  "replicate": {"base_url": "$MOCK/replicate"}
+}}
+JSON
+	export IMGEN_RULES="$RUN/mock/rules.json" GEMINI_BASE_URL="$MOCK/v1beta" OPENAI_BASE_URL="$MOCK/v1"
+	export GEMINI_API_KEY=smoke-mock-gemini OPENAI_API_KEY=smoke-mock-openai \
+		RECRAFT_API_KEY=smoke-mock-recraft REPLICATE_API_TOKEN=smoke-mock-replicate
+	export SMOKE_MOCKED="gemini openai recraft replicate"
+	echo "== mock: $MOCK serves gemini, openai, recraft and replicate (log: $RUN/mock/requests.jsonl)"
+fi
+
 # Isolate history, cache and the budget ledger: --last sees only this run, and
-# IMGEN_BUDGET caps this run's own spend.
+# IMGEN_BUDGET caps this run's own spend. A mock run spends nothing, and a
+# budget would refuse the mocked providers whose price imgen does not know.
 export XDG_STATE_HOME="$RUN/state" XDG_CACHE_HOME="$RUN/cache"
-export IMGEN_HISTORY=off IMGEN_BUDGET="$MAX_USD" IMGEN_QUIET=1
-export SMOKE_ROOT="$ROOT" SMOKE_RUN="$RUN" SMOKE_REUSE="$REUSE" SMOKE_FIXTURES="$RUN/fixtures"
+export IMGEN_HISTORY=off IMGEN_QUIET=1
+if [ "$MODE" = live ]; then
+	export IMGEN_BUDGET="$MAX_USD"
+fi
+export SMOKE_MODE="$MODE" SMOKE_ROOT="$ROOT" SMOKE_RUN="$RUN" SMOKE_REUSE="$REUSE" SMOKE_FIXTURES="$RUN/fixtures"
 imgen version | tee "$RUN/version.txt"
 
 cat >"$RUN/tools/lib.sh" <<'SH'
@@ -108,6 +207,9 @@ import glob, hashlib, json, os, re, shlex, subprocess, sys
 ROOT = os.environ["SMOKE_ROOT"]
 RUN = os.environ["SMOKE_RUN"]
 FIX = os.environ["SMOKE_FIXTURES"]
+# Mock mode: only these providers count as ready; the others run with --dry-run.
+MOCK = os.environ.get("SMOKE_MODE") == "mock"
+MOCKED = set(os.environ.get("SMOKE_MOCKED", "").split())
 IMG_EXT = (".png", ".jpg", ".jpeg", ".webp", ".svg")
 # Inputs the docs name as stand-ins; a stub for these is expected.
 PLACEHOLDER_INPUTS = {"in.png", "photo.png", "room.png", "mask.png"}
@@ -297,9 +399,10 @@ def write_fixtures():
     json.dump(rules, open(os.path.join(FIX, "rules-extending.json"), "w"), indent=1)
 
 
-def page_rules(rel):
-    """Rules for one page: the user's rules plus the styles and profiles the page
-    defines in its own json blocks, as a reader would add them."""
+def page_rules(rel, types):
+    """Rules for one page: the user's rules plus the styles, profiles and new
+    provider instances the page defines in its own json blocks, as a reader
+    would add them. An instance imgen already knows is never replaced."""
     base = json.load(open(os.path.join(FIX, "rules-extending.json" if rel == "docs/extending.md" else "rules-user.json")))
     text = open(os.path.join(ROOT, rel), encoding="utf-8").read()
     added = False
@@ -313,6 +416,11 @@ def page_rules(rel):
         for k in ("styles", "profiles"):
             if isinstance(obj.get(k), dict):
                 base.setdefault(k, {}).update(obj[k])
+                added = True
+        provs = obj.get("providers") if isinstance(obj.get("providers"), dict) else {}
+        for name, inst in provs.items():
+            if name not in types and name not in base.get("providers", {}) and isinstance(inst, dict) and inst.get("type"):
+                base.setdefault("providers", {})[name] = inst
                 added = True
     if not added and rel != "docs/extending.md":
         return None
@@ -360,6 +468,8 @@ def requests_of(sub, objs):
 def plan():
     write_fixtures()
     ready = doctor_ready()
+    if MOCK:
+        ready &= MOCKED
     base_env = dict(os.environ)
     types = provider_types(dict(base_env, IMGEN_RULES=os.path.join(FIX, "rules-extending.json")))
     files = ["README.md"] + sorted(glob.glob(os.path.join(ROOT, "docs", "*.md")))
@@ -371,8 +481,11 @@ def plan():
         drydir = os.path.join(RUN, "plan", page)
         os.makedirs(os.path.join(pdir, ".smoke"), exist_ok=True)
         os.makedirs(drydir, exist_ok=True)
-        rules = page_rules(rel)
+        rules = page_rules(rel, types)
         page_env = dict(base_env, IMGEN_RULES=rules) if rules else base_env
+        ptypes = dict(types)
+        if rules:
+            ptypes.update({k: v.get("type", "") for k, v in json.load(open(rules)).get("providers", {}).items() if k not in types})
         script = ["# %s" % rel, 'cd "%s" || exit 2' % pdir, '. "%s/tools/lib.sh"' % RUN]
         if rules:
             script.append("export IMGEN_RULES=%s" % shlex.quote(rules))
@@ -405,7 +518,7 @@ def plan():
                 assigns, argv = seg
                 st = {"id": len(steps), "page": page, "pdir": pdir, "loc": "%s:%d" % (rel, n),
                       "doc": text, "argv": argv, "assigns": assigns, "notes": []}
-                classify(st, ready, types, drydir, page_env)
+                classify(st, ready, ptypes, drydir, page_env)
                 steps.append(st)
                 page_steps.append(st)
         # History only where an example reads it: --last/rerun and the step before.
@@ -436,7 +549,8 @@ def plan():
     for st in steps:
         print("%-34s %-16s %-6s %8s  %s" % (st["loc"], st["cls"], st["mode"],
               "$%.3f" % st["est"] if st["mode"] == "run" else "", " ".join(st["argv"])[:110]))
-    print("\nestimated spend for paid runs: $%.3f%s" % (total, " (unknown price: %s)" % ", ".join(unknown) if unknown else ""))
+    print("\n%s: $%.3f%s" % ("list price of the mocked calls (mock mode spends $0)" if MOCK else "estimated spend for paid runs",
+                              total, " (unknown price: %s)" % ", ".join(unknown) if unknown else ""))
     with open(os.path.join(RUN, "estimate.txt"), "w") as f:
         f.write("%.3f %d\n" % (total, len(unknown)))
 
@@ -454,6 +568,9 @@ def classify(st, ready, types, drydir, env):
     if synopsis:
         st.update(cls="SKIP-SYNOPSIS", mode="skip", reason="usage line, not a runnable example")
         return
+    if re.search(r"\b(curl|wget)\b[^|]*\|", st["doc"]):
+        st.update(cls="SKIP-FETCH", mode="skip", reason="pipes in a download from a placeholder URL")
+        return
     if sub in FREE_SUBS or "-h" in argv or "--help" in argv:
         st.update(cls="RUN-FREE", mode="run", reason="no API call")
         return
@@ -463,6 +580,8 @@ def classify(st, ready, types, drydir, env):
             st.update(cls="RUN-FREE", mode="run", reason="model listing (no image cost)")
         elif types.get(p) == "exec" or p == "local":
             st.update(cls="SKIP-LOCAL", mode="skip", reason="needs the local server or ComfyUI running")
+        elif MOCK:
+            st.update(cls="SKIP-NOMOCK", mode="skip", reason="no mock for %s; models has no --dry-run" % p)
         else:
             st.update(cls="SKIP-NOKEY", mode="skip", reason="no key for %s here; models has no --dry-run" % p)
         return
@@ -499,6 +618,8 @@ def classify(st, ready, types, drydir, env):
             st.update(cls="RUN-FREE", mode="run", reason="echo test plugin, no API call")
         else:
             st.update(cls="SKIP-LOCAL", mode="dry", reason="local server/ComfyUI; dry-run only")
+    elif any(p not in ready for p in provs) and MOCK:
+        st.update(cls="SKIP-NOMOCK", mode="dry", reason="no mock for %s; dry-run only" % ",".join(p for p in provs if p not in ready))
     elif any(p not in ready for p in provs):
         st.update(cls="SKIP-NOKEY", mode="dry", reason="no key for %s; dry-run only" % ",".join(p for p in provs if p not in ready))
     else:
@@ -521,7 +642,9 @@ def dry_line(text, sub):
 def step_script(st, seen):
     sid = "s%03d" % st["id"]
     st["sid"] = sid
-    st["key"] = hashlib.sha256(("%s\n%s\n%s" % (st["page"], st["doc"], st["mode"])).encode()).hexdigest()[:16]
+    # A mock result must never stand in for a live one, or the reverse.
+    key = "%s\n%s\n%s" % (st["page"], st["doc"], st["mode"])
+    st["key"] = hashlib.sha256((("mock\n" + key) if MOCK else key).encode()).hexdigest()[:16]
     lines = ["", "# %s [%s]" % (st["loc"], st["cls"])]
     if st["mode"] == "skip":
         lines.append("# skipped: %s" % st["reason"])
@@ -530,7 +653,10 @@ def step_script(st, seen):
     if st["mode"] == "dry":
         text = dry_line(text, st["sub"])
     ins = [f for f in inputs_of(st["argv"]) if "/" not in f]
-    if st["cls"] == "RUN" and st.get("shape") in seen and not st.get("history"):
+    # `cat photo.png | imgen edit -i - ...` reads its input from a file too.
+    ins += [f for f in re.findall(r"(?:^|[;&|(]\s*)cat\s+([\w.-]+)\s*\|", text) if f not in ins]
+    # Mock calls are free, so every example runs; live runs a shape once.
+    if not MOCK and st["cls"] == "RUN" and st.get("shape") in seen and not st.get("history"):
         orig = seen[st["shape"]]
         st["mode"], st["dup_of"] = "dup", orig["loc"]
         lines.append("_step %s; _dup %s %s" % (sid, shlex.quote(orig["pdir"]), orig["sid"]))
@@ -744,7 +870,9 @@ def check():
         f.write("\n".join(reuse) + "\n")
     counts = {}
     with open(os.path.join(RUN, "summary.md"), "w") as f:
-        f.write("# imgen docs smoke test\n\n%s\n\n| # | Where | Class | Result | Command | Reason | Files |\n|---|---|---|---|---|---|---|\n" % read(os.path.join(RUN, "version.txt")).strip())
+        f.write("# imgen docs smoke test\n\n%s\n\nmode: %s\n\n| # | Where | Class | Result | Command | Reason | Files |\n|---|---|---|---|---|---|---|\n" % (
+            read(os.path.join(RUN, "version.txt")).strip(),
+            "mock (local mock APIs, dummy keys, $0)" if MOCK else "live (real APIs)"))
         for st, status, why, files in rows:
             counts[status] = counts.get(status, 0) + 1
             cmd = " ".join(shlex.quote(a) for a in st["assigns"] + st["argv"]).replace("|", "\\|")
@@ -761,44 +889,106 @@ def flag_pos_file(argv):
     return split_args(argv)[1][-1]
 
 
+# ---------- mock mode ----------
+
+REAL_HOSTS = ("generativelanguage.googleapis.com", "api.openai.com", "chatgpt.com", "external.api.recraft.ai",
+              "api.replicate.com", "api.ideogram.ai", "api.bfl.ai", "fal.run", "api.higgsfield.ai")
+
+
+def mockcheck():
+    """Prove that a mock run reached only the mock, and only with mock keys."""
+    entries = [json.loads(l) for l in read(os.path.join(RUN, "mock", "requests.jsonl")).splitlines() if l.strip()]
+    fails, hits = [], {}
+    if not entries:
+        fails.append("the mock log is empty: no example reached the mock")
+    for e in entries:
+        fam = e.get("route", "").split("_")[0]
+        hits[fam] = hits.get(fam, 0) + 1
+        what = "%s %s (HTTP %s)" % (e.get("method"), e.get("path"), e.get("status"))
+        if e.get("auth") in ("foreign", "missing", "leaked"):
+            fails.append("%s: the credential was %s" % (what, e["auth"]))
+        if e.get("route") == "unhandled":
+            fails.append("%s: the mock has no such route" % what)
+        if e.get("exception") or int(e.get("status") or 0) >= 500:
+            fails.append("%s: mock error %s" % (what, e.get("exception", "")))
+    # Every mocked provider that an example ran on must show up in the log.
+    want = set()
+    for st in json.load(open(os.path.join(RUN, "plan.json"))):
+        if st["cls"] == "RUN" and st["mode"] == "run":
+            want.update(p for p in st.get("providers", []) if p in MOCKED)
+    for p in sorted(want - set(hits)):
+        fails.append("examples ran on %s, but the mock saw no %s request" % (p, p))
+    # Tripwire: a step that tried a real API names its host, or found no route.
+    for err in sorted(glob.glob(os.path.join(RUN, "pages", "*", ".smoke", "*.err"))):
+        text, rel = read(err), os.path.relpath(err, RUN)
+        fails += ["%s names %s" % (rel, h) for h in REAL_HOSTS if h in text]
+        if "network is unreachable" in text:
+            fails.append("%s: the step tried to reach the network" % rel)
+    for c in read(os.path.join(RUN, "mock", "codex-calls.log")).splitlines():
+        if c.strip() and c.strip() != "login status":
+            fails.append("codex was run: codex %s" % c.strip())
+    print("mock requests: %d (%s)" % (len(entries), ", ".join("%s %d" % kv for kv in sorted(hits.items()))))
+    print("credentials: %s" % ("all smoke-mock-* dummies; downloads carried none" if not any(
+        e.get("auth") in ("foreign", "missing", "leaked") for e in entries) else "see MOCK-FAIL below"))
+    for f in fails:
+        print("MOCK-FAIL %s" % f)
+    print("mock checks: %s" % ("FAIL %d" % len(fails) if fails else "PASS"))
+    sys.exit(1 if fails else 0)
+
+
 if __name__ == "__main__":
-    {"plan": plan, "check": check}[sys.argv[1]]()
+    {"plan": plan, "check": check, "mockcheck": mockcheck}[sys.argv[1]]()
 PY
 
 echo "== plan: extract, classify, price (dry runs only)"
 python3 -I "$RUN/tools/smoke.py" plan | tee "$RUN/plan.txt"
 read -r EST UNKNOWN <"$RUN/estimate.txt"
 
-if [ "$UNKNOWN" != "0" ]; then
-	echo "smoke-docs: $UNKNOWN paid step(s) have no price; refusing to run (see $RUN/manifest.tsv)" >&2
-	exit 3
+if [ "$MODE" = live ]; then
+	if [ "$UNKNOWN" != "0" ]; then
+		echo "smoke-docs: $UNKNOWN paid step(s) have no price; refusing to run (see $RUN/manifest.tsv)" >&2
+		exit 3
+	fi
+	if awk -v e="$EST" -v m="$MAX_USD" 'BEGIN { exit !(e > m) }'; then
+		echo "smoke-docs: estimate \$$EST is over the \$$MAX_USD cap; nothing was run" >&2
+		exit 3
+	fi
+	if [ "$ESTIMATE" = 1 ]; then
+		echo "estimate only: \$$EST (cap \$$MAX_USD). Run without --estimate to spend it."
+		exit 0
+	fi
+	echo "== run: \$$EST estimated, cap \$$MAX_USD"
+else
+	echo "== run: mock, \$0 (the same calls would list at \$$EST live)"
 fi
-if awk -v e="$EST" -v m="$MAX_USD" 'BEGIN { exit !(e > m) }'; then
-	echo "smoke-docs: estimate \$$EST is over the \$$MAX_USD cap; nothing was run" >&2
-	exit 3
-fi
-if [ "$ESTIMATE" = 1 ]; then
-	echo "estimate only: \$$EST (cap \$$MAX_USD). Run without --estimate to spend it."
-	exit 0
-fi
-
-echo "== run: \$$EST estimated, cap \$$MAX_USD"
 # Pages are independent (each chains only its own commands), so they run at
 # once; the budget ledger is shared and locked, so the cap still holds.
 start=$SECONDS
+pids=()
 while IFS= read -r page; do
 	[ -n "$page" ] || continue
 	(bash "$RUN/pages/$page.sh" >"$RUN/pages/$page.log" 2>&1 || echo "smoke-docs: page script $page exited $?" >&2
 		echo "-- $page done ($((SECONDS - start))s)") &
+	pids+=("$!")
 done <"$RUN/pages/order.txt"
-wait
+# Only the pages: in mock mode the mock is a background job too.
+wait "${pids[@]}"
 
-echo "== spend (this run's isolated history and budget ledger)"
-imgen history --cost --since 1d | tee "$RUN/spend.txt" || true
-if [ -f "$RUN/state/imgen/budget.jsonl" ]; then
-	jq -s 'map(.cost_usd // 0) | add // 0 | "ledger (history off): $\(. * 1000 | round / 1000)"' -r \
-		"$RUN/state/imgen/budget.jsonl" | tee -a "$RUN/spend.txt"
+if [ "$MODE" = live ]; then
+	echo "== spend (this run's isolated history and budget ledger)"
+	imgen history --cost --since 1d | tee "$RUN/spend.txt" || true
+	if [ -f "$RUN/state/imgen/budget.jsonl" ]; then
+		jq -s 'map(.cost_usd // 0) | add // 0 | "ledger (history off): $\(. * 1000 | round / 1000)"' -r \
+			"$RUN/state/imgen/budget.jsonl" | tee -a "$RUN/spend.txt"
+	fi
 fi
 
 echo "== check"
-python3 -I "$RUN/tools/smoke.py" check
+rc=0
+python3 -I "$RUN/tools/smoke.py" check || rc=$?
+if [ "$MODE" = mock ]; then
+	echo "== mock checks: the run reached only the mock, with mock keys only"
+	python3 -I "$RUN/tools/smoke.py" mockcheck | tee "$RUN/mock/checks.txt" || rc=1
+fi
+echo "wall time: $(($(date +%s) - SMOKE_T0))s"
+exit "$rc"
