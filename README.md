@@ -42,6 +42,8 @@ Unix-friendly: `-i -` and `-o -` move image bytes through pipes, and on kitty, i
 cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i - -o - > night.png
 ```
 
+`imgen qr https://example.com "a calm koi pond"` turns a link into QR code art and checks that it still scans ([recipe](docs/recipes.md#qr-code-art)).
+
 Paths of saved files go to stdout. Model, time and estimated cost go to stderr (one line such as `✓ 1 image · gemini-3.1-flash-image · 8.8s · ~$0.067` on a terminal). `imgen gen -h` shows every flag, grouped, with examples. Short flags have long names too (`-a`/`--aspect`, `-p`/`--provider`, ...). More in [Getting started](docs/getting-started.md).
 
 On a terminal, a bare `imgen` (or `imgen -i`) starts an [interactive session](docs/interactive.md). Type a prompt, then type what to change, and imgen edits the last image:

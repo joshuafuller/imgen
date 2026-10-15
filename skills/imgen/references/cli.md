@@ -28,7 +28,7 @@ imgen version                          version, Go version, platform
 
 `-h` after any command prints its flags, grouped, with the common values and examples. A typo gets a suggestion: `unknown provider "gemni". Did you mean "gemini"?`.
 
-More commands: `imgen compare -p a,b,c "prompt"` (per-provider files + `compare-sheet.png`), `imgen upscale [--scale 2|4] [--local] in.png`, `imgen history [-n N] [--json] [--cost [--since 7d]]`, `imgen rerun <id|last> [extra flags]`, `imgen styles`, `imgen profiles`, `imgen init`.
+More commands: `imgen compare -p a,b,c "prompt"` (per-provider files + `compare-sheet.png`), `imgen qr TEXT "scene"` (QR code art, checked module by module; see recipes), `imgen upscale [--scale 2|4] [--local] in.png`, `imgen history [-n N] [--json] [--cost [--since 7d]]`, `imgen rerun <id|last> [extra flags]`, `imgen styles`, `imgen profiles`, `imgen init`.
 
 Iteration flags: `--last` (edit the newest output), `--open`, `--preview` (every image; half blocks when the terminal has no graphics), `--no-preview`, `--copy`, `--grid` (sheet for `-n`), `--style NAME` (repeatable), `--profile NAME`, `--enhance`, `--cache`, `--quiet`, `--notify`, `--no-embed`, `--embed-prompt` (opt-in: also write the prompt into the file), `--force` (ignore `IMGEN_BUDGET`). `-i` also takes `https://...` URLs, `clip:` and `-` (stdin). Default file names come from the prompt.
 

@@ -14,6 +14,7 @@ Tested patterns. Change prompts freely, and keep the flags.
 - Sprite sheet for many small assets
 - Batch jobs
 - Plate + overlay (diagrams, maps, labeled slides)
+- QR code art
 - Drafts cheap, finals sharp
 
 ## App icon with transparency
@@ -122,6 +123,15 @@ Use this whenever the image needs exact words, IDs or arrows.
 5. **Check:** Read `final.png`. Labels must not cover items, pills must not sit on arrowheads, and every ID must appear exactly once. Adjust the spec and render again. This is cheap, with no API call.
 
 Never ask an image model to fix text. It changes other text and details too.
+
+## QR code art
+
+```sh
+imgen qr https://github.com/joshuafuller/imgen "a calm koi pond with lily pads"
+imgen qr --safe --dark "deep water and koi" --light "lily pads and blossoms" URL "a koi pond"
+```
+
+imgen draws an exact level-H QR code, Gemini repaints it as the scene, and imgen reads every module back. A try passes when under 3% of the modules are wrong and no finder or timing module is wrong. It stops at the first pass, up to `-n` tries (default 3, one paid edit each). Exit 1 means no try passed: the best try is saved anyway, but it may not scan. Tell the user, and offer to run it again. `--safe` adds a pale quiet zone for strict desktop readers. `--guide-only` writes the plain code with no API call. Do not use `edit` with a QR code by hand: `qr` checks the result. Ask the user to scan it with a phone before print.
 
 ## Drafts cheap, finals sharp
 
