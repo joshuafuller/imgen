@@ -29,7 +29,15 @@ imgen version                          version, Go version, platform
 
 More commands: `imgen compare -p a,b,c "prompt"` (per-provider files + `compare-sheet.png`), `imgen upscale [--scale 2|4] [--local] in.png`, `imgen history [-n N] [--json] [--cost [--since 7d]]`, `imgen rerun <id|last> [extra flags]`, `imgen styles`, `imgen profiles`, `imgen init`.
 
-Iteration flags: `--last` (edit the newest output), `--open`, `--preview`, `--copy`, `--grid` (sheet for `-n`), `--style NAME` (repeatable), `--profile NAME`, `--enhance`, `--cache`, `--quiet`, `--notify`, `--no-embed`, `--embed-prompt` (opt-in: also write the prompt into the file), `--force` (ignore `IMGEN_BUDGET`). `-i` also takes `https://...` URLs and `clip:`. Default file names come from the prompt.
+Iteration flags: `--last` (edit the newest output), `--open`, `--preview` (every image; half blocks when the terminal has no graphics), `--no-preview`, `--copy`, `--grid` (sheet for `-n`), `--style NAME` (repeatable), `--profile NAME`, `--enhance`, `--cache`, `--quiet`, `--notify`, `--no-embed`, `--embed-prompt` (opt-in: also write the prompt into the file), `--force` (ignore `IMGEN_BUDGET`). `-i` also takes `https://...` URLs, `clip:` and `-` (stdin). Default file names come from the prompt.
+
+Pipes (gen, edit, upscale): `-i -` reads the input image from stdin (same size and pixel checks as a file; the prompt must then be words or `-P file`). `-o -` writes exactly one image to stdout and nothing else; it refuses a terminal, `-n` above 1, `--json`, `--meta`, `--grid`, `--open` and `--copy`. History records the output as `-`. `upscale` takes its input as an argument or with `-i`. MCP never accepts `-`.
+
+```sh
+cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i - -o - > night.png
+```
+
+Pictures in the terminal: after gen, edit and upscale, the first image shows inline on stderr when it is a terminal with kitty, iTerm2 or sixel graphics. Never with `--json`, `--quiet`, `-o -` or in MCP. `IMGEN_PREVIEW=off|auto|always` sets the default.
 
 The prompt can sit anywhere among the flags. `-P file` reads it from a file, and a prompt of `-` reads stdin.
 
@@ -118,6 +126,7 @@ New API options therefore work with no imgen update.
 | `IMGEN_ENV_FILE` | key file (default `~/.config/imgen/env`, must be mode 600; imgen loads it itself) |
 | `IMGEN_RETRIES` | attempts for 429/5xx (default 3, with backoff and Retry-After) |
 | `IMGEN_PRICES` | JSON file that overrides the built-in price table |
+| `IMGEN_PREVIEW` | `off`, `auto` (default: inline only with kitty/iTerm2/sixel) or `always` (like `--preview`) |
 | `IMGEN_MAX_PIXELS` | largest accepted image, width x height (default 40000000); applies to inputs, masks, output and post-processing |
 | `IMGEN_HISTORY_PROMPTS` | `off` omits prompt text from the history and `--meta` sidecars (default on; local 0600 files) |
 | `IMGEN_MCP_MAX_BYTES` | `imgen mcp` only: total bytes of saved images per session (default 536870912; `off` disables); later calls are refused once reached |

@@ -162,6 +162,16 @@ This saves `lighthouse-gemini.jpg`, `lighthouse-openai.png`, `lighthouse-codex.p
 - Repeat a request for free with `--cache`.
 - Cap the day's spend with `IMGEN_BUDGET`. See [Configuration](configuration.md#daily-budget).
 
+## Pipe chain
+
+`-i -` reads the image from stdin and `-o -` writes it to stdout, so imgen fits in a pipeline:
+
+```sh
+cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i - -o - > night.png
+```
+
+The prompt cannot also come from stdin, so give it as words. `-o -` writes exactly one image and refuses a terminal. The history records the output as `-`. More in the [CLI reference](cli.md#pipes).
+
 ## Scripts and agents
 
 ```sh

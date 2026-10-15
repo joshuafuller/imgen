@@ -51,7 +51,7 @@ The prompt can be words, `-P file`, or `-` to read stdin. Flags may come before 
 | `-f`, `--format format` | output format | `png`, `jpeg`, `webp`; Recraft also `svg`. Some providers ignore it. |
 | `-b`, `--background mode` | background | OpenAI `transparent`/`opaque`/`auto`. |
 | `-n`, `--count N` | number of images | Files get `-1`, `-2`, ... suffixes. |
-| `-i`, `--input src` | input image, repeatable | A path, an `http(s)://` URL, or `clip:` for the clipboard. |
+| `-i`, `--input src` | input image, repeatable | A path, an `http(s)://` URL, `clip:` for the clipboard, or `-` for stdin. See [Pipes](#pipes). |
 | `--mask file` | mask for an edit | Needs an input image. Not every provider supports it. |
 | `--seed N` | seed | Used only where the provider supports it. |
 | `--set key=value` | extra API parameter, repeatable | The value is parsed as JSON when it is valid JSON, else sent as a string. |
@@ -69,7 +69,7 @@ The prompt can be words, `-P file`, or `-` to read stdin. Flags may come before 
 
 | Flag | Meaning |
 |---|---|
-| `-o`, `--output dir` | Output directory. Default `.`. Created if missing. |
+| `-o`, `--output dir` | Output directory. Default `.`. Created if missing. `-` writes the one image to stdout; see [Pipes](#pipes). |
 | `--name base` | Base file name. Default: a slug of the prompt (see [File names](#file-names)). Must be a plain name: no `/`, `\`, `..`, leading dot or control characters. |
 | `--json` | Print one JSON result on stdout. |
 | `--meta` | Write a `<image>.json` sidecar with the request and result (mode 0600). |
@@ -77,7 +77,8 @@ The prompt can be words, `-P file`, or `-` to read stdin. Flags may come before 
 | `--embed-prompt` | Also embed the prompt in PNG/JPEG metadata. |
 | `--no-embed` | Embed nothing in PNG/JPEG metadata. |
 | `--open` | Open the result in the default viewer. |
-| `--preview` | Show the result inline in the terminal (kitty, iTerm2, WezTerm). |
+| `--preview` | Show every result in the terminal: inline with kitty, iTerm2 or sixel graphics, else as Unicode half blocks. See [Pictures in the terminal](#pictures-in-the-terminal). |
+| `--no-preview` | Never show the result in the terminal. |
 | `--copy` | Copy the first result to the clipboard. |
 | `--notify` | Send a desktop notice when done. |
 | `--quiet` | No info lines on stderr and no spinner. Errors still print. |
@@ -141,9 +142,42 @@ imgen upscale [-p replicate|fal] [-m model] [--scale 2|4] [--local] in.png
 | `-m`, `--model id` | Model. Default: the `upscale` rule (`nightmareai/real-esrgan` on Replicate; `fal-ai/esrgan` on fal). |
 | `--scale N` | `2` (default) or `4`. |
 | `--local` | Scale on this machine with no API call. |
-| `-o`/`--output`, `--name`, `--json`, `--timeout`, `--open`, `--preview`, `--copy`, `--quiet`, `--notify` | As in `gen`. |
+| `-i`, `--input src` | The input image, instead of the argument. |
+| `-o`/`--output`, `--name`, `--json`, `--timeout`, `--open`, `--preview`, `--no-preview`, `--copy`, `--quiet`, `--notify` | As in `gen`. |
 
-The input can be a file, a URL or `clip:`. The result is saved as `<input>-x<scale>.<ext>`. With `--json` it prints `{"ok":true,"path":"...","elapsed_ms":N}`.
+The input can be a file, a URL, `clip:` or `-` for stdin. `-o -` writes the result to stdout. The result is saved as `<input>-x<scale>.<ext>`. With `--json` it prints `{"ok":true,"path":"...","elapsed_ms":N}`.
+
+## Pipes
+
+`-i -` reads the input image from stdin, and `-o -` writes the image to stdout instead of a file. `gen`, `edit` and `upscale` take both, so commands chain like other Unix tools:
+
+```sh
+cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i - -o - > night.png
+imgen gen -o - "a red cube" | convert - -resize 50% small.png
+curl -s https://example.com/in.jpg | imgen upscale --local -i - -o out/
+```
+
+- **Stdin input** has the same checks as a file: at most 64 MiB, a real PNG, JPEG, GIF or WebP, and within the pixel limits. Only one of the prompt, `-i` and `--mask` can read stdin, so with `-i -` give the prompt as words or with `-P file`.
+- **Stdout output** is exactly one image and nothing else: no path line, no preview. imgen refuses `-n` above 1, `--json`, `--meta`, `--grid`, `--open` and `--copy` with `-o -`, before any paid call. A provider that returns more than one image anyway is an error. `--dry-run` prints its report on stderr.
+- **A terminal is refused.** If stdout is a terminal, imgen stops with `refusing to write image bytes to a terminal; redirect or pipe it`.
+- **History.** The history records a stdout output as `-`. `--last` cannot use it.
+- `batch` and `compare` do not take `-`. The MCP server never accepts `-` for `images`, `mask` or `output_dir`, because stdin and stdout carry the protocol.
+
+## Pictures in the terminal
+
+After `gen`, `edit` and `upscale`, imgen shows the first image in the terminal when stderr is a terminal (with `NO_COLOR` unset and `TERM` not `dumb`) that has a graphics protocol:
+
+| Protocol | Terminals |
+|---|---|
+| kitty | kitty, Ghostty |
+| iTerm2 | iTerm2, WezTerm |
+| sixel | foot, mlterm, Windows Terminal (`WT_SESSION`), and any other terminal that lists sixel in its answer to the DA1 query, such as xterm started with sixel support |
+
+imgen sends the DA1 query only to the controlling terminal (`/dev/tty`, on Linux), only from the foreground process, and never inside tmux or screen. Pictures fit the terminal width and keep their aspect ratio.
+
+`--preview` shows every image, and falls back to Unicode half blocks (`▀`) on a terminal with no graphics: 24-bit color when `COLORTERM` is `truecolor` or `24bit`, else 256 colors. `--no-preview` turns pictures off. `IMGEN_PREVIEW` sets the default: `off`, `auto` (the default) or `always` (the same as `--preview`). The flags win over the variable.
+
+Nothing is shown with `--json`, `--quiet` or `-o -`, when stderr is not a terminal, or in the MCP server. An SVG, or an image over the pixel limits, is not shown.
 
 ## rerun
 
@@ -258,7 +292,7 @@ Provider names are read at run time from `imgen providers --names`, so new insta
 
 imgen is built to be called from scripts and agents.
 
-- **stdout** gets one absolute path per saved file, one per line, and nothing else. With `--grid` the sheet path comes last. `compare` prefixes each path with the provider name (see [compare](#compare)).
+- **stdout** gets one absolute path per saved file, one per line, and nothing else. With `-o -` it gets only the image bytes (see [Pipes](#pipes)). With `--grid` the sheet path comes last. `compare` prefixes each path with the provider name (see [compare](#compare)).
 - **stderr** gets info lines: `model: <id>`, `time: <duration>`, `api model: <id>` (only when the API reports a different ID), `cost: ~$0.067` or `cost: unknown`, and `cache: hit` on a cache hit. `--quiet` hides them. These lines do not change, so scripts can parse them.
 - **On a terminal**, `gen` and `edit` print one summary line on stderr instead, such as `✓ 1 image · gemini-3.1-flash-image · 8.8s · ~$0.067`. imgen uses terminal colors only when stderr (or, for `doctor`, stdout) is a terminal, `NO_COLOR` is not set and `TERM` is not `dumb`. Pipes, files and the MCP server always get plain text, and stdout never gets escape codes when it is not a terminal.
 - **Errors** are one line on stderr: `imgen: <what went wrong>. <what to do>`, for example `imgen: edit needs an input image. Add one with -i in.png (a path, URL or clip:)`.
@@ -336,6 +370,8 @@ On an error, stdout gets `{"ok":false,"error":"...","exit":1}` (plus `line` in `
 | `IMGEN_MAX_PIXELS` | Largest accepted image, width times height. Default `40000000`. Applies to inputs, masks, provider output and post-processing. |
 | `IMGEN_ALLOW_PRIVATE_URLS` | `1` allows `-i` URLs on private or loopback addresses. See [Security](security.md). |
 | `IMGEN_QUIET` | Any value turns off the progress spinner. |
+| `IMGEN_PREVIEW` | `off`, `auto` (default) or `always`: pictures in the terminal. See [Pictures in the terminal](#pictures-in-the-terminal). |
+| `COLORTERM` | `truecolor` or `24bit` gives half-block pictures 24-bit color. |
 | `NO_COLOR` | Any value turns off terminal colors. `TERM=dumb` does the same. |
 | `XDG_STATE_HOME`, `XDG_CACHE_HOME` | Move the history and cache folders. |
 | `IMGEN_MCP_*` | MCP server settings. See [MCP server](mcp.md#environment-overrides). |

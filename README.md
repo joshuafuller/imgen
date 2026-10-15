@@ -36,6 +36,12 @@ imgen gen -p openai -r 1024x1024 -b transparent -f png "flat rocket app icon"
 imgen gen --json "a red cube" | jq -r '.files[0].path'
 ```
 
+Unix-friendly: `-i -` and `-o -` move image bytes through pipes, and on kitty, iTerm2, WezTerm or a sixel terminal the result shows inline.
+
+```sh
+cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i - -o - > night.png
+```
+
 Paths of saved files go to stdout. Model, time and estimated cost go to stderr (one line such as `✓ 1 image · gemini-3.1-flash-image · 8.8s · ~$0.067` on a terminal). `imgen gen -h` shows every flag, grouped, with examples. Short flags have long names too (`-a`/`--aspect`, `-p`/`--provider`, ...). More in [Getting started](docs/getting-started.md).
 
 ## What people use it for
