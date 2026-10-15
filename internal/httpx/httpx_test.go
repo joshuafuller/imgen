@@ -229,10 +229,11 @@ func rateLimited(ra string) step {
 	}
 }
 
-// A paid request is never sent twice: the provider controls every status
-// and byte it returns, so none of them proves that it did not run and bill
-// the request. SendHint returns the first answer, with the hint for its
-// status; a network error ends with PaidHint.
+// Without Retry429 (a custom endpoint) a paid request is never sent twice:
+// the provider controls every status and byte it returns, so none of them
+// proves that it did not run and bill the request. SendHint returns the
+// first answer, with the hint for its status; a network error ends with
+// PaidHint.
 func TestPaidNeverRetried(t *testing.T) {
 	isURLErr := func(err error) bool { var u *url.Error; return errors.As(err, &u) }
 	cases := []struct {
@@ -320,25 +321,29 @@ func TestPaidPolicy(t *testing.T) {
 }
 
 // The hint ends a paid request's status error: after a 408 or a 5xx the
-// provider may have billed it, and a 429 is not retried either. A free
+// provider may have billed it; after a 429 it says when to run it again,
+// and how many attempts were made when there was more than one. A free
 // request has none.
 func TestHint(t *testing.T) {
 	paid, free := PaidPolicy(), DefaultPolicy()
 	for _, s := range []int{408, 500, 502, 503, 504, 524} {
-		if got := paid.hint(s, "20"); got != ". "+PaidHint {
+		if got := paid.hint(s, "20", 1); got != ". "+PaidHint {
 			t.Errorf("paid hint(%d) = %q", s, got)
 		}
 	}
-	if got := paid.hint(429, "20"); got != ". "+RateHint("20") {
+	if got := paid.hint(429, "20", 1); got != ". "+RateHint("20") {
 		t.Errorf("paid hint(429) = %q", got)
 	}
+	if got := paid.hint(429, "20", 3); got != ". "+RateHintAfter("20", 3) {
+		t.Errorf("paid hint(429) after 3 attempts = %q", got)
+	}
 	for _, s := range []int{200, 400, 401, 404} {
-		if got := paid.hint(s, "20"); got != "" {
+		if got := paid.hint(s, "20", 1); got != "" {
 			t.Errorf("paid hint(%d) = %q", s, got)
 		}
 	}
 	for _, s := range []int{200, 400, 408, 429, 500, 503} {
-		if got := free.hint(s, "20"); got != "" {
+		if got := free.hint(s, "20", 1); got != "" {
 			t.Errorf("free hint(%d) = %q", s, got)
 		}
 	}
@@ -347,7 +352,7 @@ func TestHint(t *testing.T) {
 // RateHint passes on a Retry-After in seconds, so the user knows when to run
 // the request again. Any other value is a plain "later".
 func TestRateHint(t *testing.T) {
-	const base = "Rate limited: not retried automatically, because a paid request is never sent twice; run it again "
+	const base = "Rate limited: imgen does not send this paid request again; run it again "
 	for ra, want := range map[string]string{
 		"20":                            "in 20s",
 		"1":                             "in 1s",

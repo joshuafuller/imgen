@@ -1,16 +1,20 @@
 // Package httpx sends HTTP requests with retry and backoff for transient
 // failures (429, 5xx, network errors). Every HTTP backend uses it. A request
-// that can bill (PaidPolicy) is never retried.
+// that can bill (PaidPolicy) is sent again only after a 429, and only on the
+// provider's official API (Retry429).
 package httpx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- backoff jitter only, not security
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,22 +25,58 @@ type Policy struct {
 	Max      time.Duration // backoff cap; 0 means 30s
 	MaxBytes int64         // response body cap; 0 means 16 MiB
 	Paid     bool          // the request can bill, so it is sent once; see PaidPolicy
+	// Retry429 lets a paid request be sent again after a 429, and only
+	// after a 429, up to Attempts times. Set it only when the request goes
+	// to the provider's official API host (see OfficialHost): that API does
+	// not bill a 429. A custom endpoint is never retried.
+	Retry429 bool
+	// Sent, when set, counts every request sent under the policy, so the
+	// caller can count each attempt of a paid request in the cost. Use one
+	// counter per request: it is not safe for concurrent use.
+	Sent *int
 }
+
+const (
+	// maxWait caps one wait between attempts, Retry-After included, so a
+	// provider cannot stall a request with a long Retry-After.
+	maxWait = time.Minute
+	// maxPaidWait caps the total wait of a paid request's 429 retries.
+	maxPaidWait = 2 * time.Minute
+)
 
 // PaidHint ends the error of a paid request after a failure the provider
 // may have billed. Send adds it to a network error; SendHint returns it as
 // the hint after a 408 or a 5xx.
 const PaidHint = "Not retried, because the provider may have billed it: run it again to retry"
 
-// RateHint ends the error of a paid request after a 429. retryAfter is the
+// RateHint ends the error of a paid request after a 429 that was not sent
+// again: on a custom endpoint, or a streamed call. retryAfter is the
 // response's Retry-After header: a wait in seconds tells the user when to
 // run the request again.
 func RateHint(retryAfter string) string {
-	when := "later"
+	return "Rate limited: imgen does not send this paid request again; run it again " + when(retryAfter)
+}
+
+// RateHintAfter ends the error of a paid request that was still rate
+// limited after attempts tries on the provider's official API.
+func RateHintAfter(retryAfter string, attempts int) string {
+	return "Rate limited after " + strconv.Itoa(attempts) + " attempts; run it again " + when(retryAfter)
+}
+
+// when is "in 20s" for a Retry-After of 20 seconds, else "later".
+func when(retryAfter string) string {
 	if n, err := strconv.Atoi(retryAfter); err == nil && n > 0 {
-		when = "in " + strconv.Itoa(n) + "s"
+		return "in " + strconv.Itoa(n) + "s"
 	}
-	return "Rate limited: not retried automatically, because a paid request is never sent twice; run it again " + when
+	return "later"
+}
+
+// OfficialHost reports whether base, an API base URL, is on host, the
+// provider's own API host (in any letter case). A backend sets Retry429
+// from it: any other host is a custom endpoint, never retried.
+func OfficialHost(base, host string) bool {
+	u, err := url.Parse(base)
+	return err == nil && host != "" && strings.EqualFold(u.Hostname(), host)
 }
 
 const (
@@ -67,25 +107,30 @@ func ImagePolicy() Policy {
 }
 
 // PaidPolicy is DefaultPolicy for a request that can create a billable job,
-// such as a POST that makes an image or rewrites a prompt. Send never sends
-// it twice, whatever the answer and whatever IMGEN_RETRIES says: the
-// provider controls every status and byte it returns, so not even a 429
-// proves that it did not run and bill the request, and IMGEN_BUDGET counts
-// the call once. A network error ends with PaidHint; SendHint returns the
-// hint for a status error.
+// such as a POST that makes an image or rewrites a prompt. Send sends it
+// once, whatever the answer: the provider controls every status and byte
+// it returns, so not even a 429 proves that it did not run and bill the
+// request. Set Retry429 for the provider's official API host, which does
+// not bill a 429: a 429, and only a 429, is then sent again, up to the
+// Attempts of DefaultPolicy (IMGEN_RETRIES), and the caller counts each
+// attempt in the cost (Sent). A network error ends with PaidHint; SendHint
+// returns the hint for a status error.
 func PaidPolicy() Policy {
 	p := DefaultPolicy()
-	p.Attempts, p.Paid = 1, true
+	p.Paid = true
 	return p
 }
 
 // hint is the text that ends a paid request's status error: ". " + PaidHint
 // after a 408 or a 5xx, which the provider may have billed, and ". " +
-// RateHint after a 429. It is "" for a free request and any other status.
-func (p Policy) hint(status int, retryAfter string) string {
+// RateHint after a 429 (RateHintAfter once more than one attempt was
+// made). It is "" for a free request and any other status.
+func (p Policy) hint(status int, retryAfter string, attempts int) string {
 	switch {
 	case !p.Paid:
 		return ""
+	case status == http.StatusTooManyRequests && attempts > 1:
+		return ". " + RateHintAfter(retryAfter, attempts)
 	case status == http.StatusTooManyRequests:
 		return ". " + RateHint(retryAfter)
 	case status == http.StatusRequestTimeout || status >= http.StatusInternalServerError:
@@ -98,8 +143,9 @@ func (p Policy) hint(status int, retryAfter string) string {
 // returns the final status and body. Non-retryable statuses return at once;
 // the caller decides what a non-2xx status means. err is set only for
 // transport or context failures that outlast every attempt. A paid request
-// is sent once: a transport failure is then the error, ending with
-// PaidHint. Use SendHint for a paid request, to explain a status error.
+// is sent once, or again after a 429 with Retry429: a transport failure is
+// then the error, ending with PaidHint. Use SendHint for a paid request, to
+// explain a status error.
 func Send(c *http.Client, newReq func() (*http.Request, error), p Policy) (int, []byte, error) {
 	status, body, _, err := SendHint(c, newReq, p)
 	return status, body, err
@@ -107,22 +153,23 @@ func Send(c *http.Client, newReq func() (*http.Request, error), p Policy) (int, 
 
 // SendHint is Send that also returns the hint, the text the caller appends
 // to the status error of a paid request: ". " + PaidHint after a 408 or a
-// 5xx, and ". " + RateHint with the Retry-After after a 429. It is "" for a
-// free request and for any other status.
+// 5xx, and ". " + RateHint or RateHintAfter with the Retry-After after a
+// 429. It is "" for a free request and for any other status.
 func SendHint(c *http.Client, newReq func() (*http.Request, error), p Policy) (int, []byte, string, error) {
 	p = p.withDefaults()
-	var lastErr error
+	var waited time.Duration
 	for attempt := 1; ; attempt++ {
 		req, err := newReq()
 		if err != nil {
 			return 0, nil, "", err
 		}
+		p.count()
 		status, body, ra, err := once(c, req, p.MaxBytes)
 		if errors.Is(err, ErrTooLarge) {
 			return status, nil, "", err
 		}
 		if err == nil && !p.retries(status) {
-			return status, body, p.hint(status, ra), nil
+			return status, body, p.hint(status, ra, attempt), nil
 		}
 		if req.Context().Err() != nil {
 			return 0, nil, "", req.Context().Err()
@@ -130,19 +177,21 @@ func SendHint(c *http.Client, newReq func() (*http.Request, error), p Policy) (i
 		if err != nil && p.Paid {
 			return 0, nil, "", fmt.Errorf("%w. %s", err, PaidHint)
 		}
-		lastErr = err
-		if attempt >= p.Attempts {
-			return status, body, "", lastErr
+		wait := p.wait(ra, attempt)
+		if attempt >= p.Attempts || p.Paid && waited+wait > maxPaidWait {
+			return status, body, p.hint(status, ra, attempt), err
 		}
-		wait := retryAfter(ra)
-		if wait == 0 {
-			wait = backoff(p, attempt)
+		waited += wait
+		if err := sleep(req.Context(), wait); err != nil {
+			return 0, nil, "", err
 		}
-		select {
-		case <-time.After(wait):
-		case <-req.Context().Done():
-			return 0, nil, "", req.Context().Err()
-		}
+	}
+}
+
+// count adds one sent request to p.Sent.
+func (p Policy) count() {
+	if p.Sent != nil {
+		*p.Sent++
 	}
 }
 
@@ -181,9 +230,12 @@ func (p Policy) withDefaults() Policy {
 }
 
 // retries reports whether Send tries again after status. A paid request is
-// never tried again.
+// tried again only after a 429, and only with Retry429.
 func (p Policy) retries(status int) bool {
-	return !p.Paid && retryable(status)
+	if p.Paid {
+		return p.Retry429 && status == http.StatusTooManyRequests
+	}
+	return retryable(status)
 }
 
 func retryable(status int) bool {
@@ -195,11 +247,24 @@ func retryable(status int) bool {
 	return false
 }
 
-// retryAfter parses a Retry-After header given in seconds.
+// wait is the pause before the attempt after attempt: the Retry-After
+// seconds, else the backoff, and never more than maxWait.
+func (p Policy) wait(ra string, attempt int) time.Duration {
+	d := retryAfter(ra)
+	if d == 0 {
+		d = backoff(p, attempt)
+	}
+	return min(d, maxWait)
+}
+
+// retryAfter parses a Retry-After header given in seconds, capped at maxWait.
 func retryAfter(v string) time.Duration {
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 0 {
 		return 0
+	}
+	if n > int(maxWait/time.Second) {
+		return maxWait
 	}
 	return time.Duration(n) * time.Second
 }
@@ -211,4 +276,16 @@ func backoff(p Policy, attempt int) time.Duration {
 		d = p.Max
 	}
 	return d/2 + rand.N(d/2+1) // #nosec G404 -- jitter, not security
+}
+
+// sleep waits d, or until ctx is done. Tests replace it.
+var sleep = func(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

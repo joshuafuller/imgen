@@ -85,6 +85,49 @@ type Result struct {
 	Model  string  // the model ID the API reports it used, if any
 	Images []Image // generated images
 	Text   string  // any text the model returned
+	// Attempts is how many times the call's paid request was sent: above 1
+	// only when a 429 on the provider's official API made the backend send
+	// it again. 0 and 1 both mean once. A call that makes several paid
+	// requests (one per image) reports the most times one was sent, so the
+	// estimate times Attempts never undercounts the cost.
+	Attempts int
+}
+
+// AttemptsError is the error of a call whose paid request was sent more
+// than once, so the caller can count each attempt in the cost. Its text is
+// the cause's.
+type AttemptsError struct {
+	Attempts int
+	Err      error
+}
+
+func (e *AttemptsError) Error() string { return e.Err.Error() }
+
+func (e *AttemptsError) Unwrap() error { return e.Err }
+
+// Attempted is the return of a backend's Generate: res with Attempts set to
+// n, or err wrapped in an AttemptsError when n is above 1.
+func Attempted(res *Result, n int, err error) (*Result, error) {
+	if err != nil {
+		if n > 1 {
+			err = &AttemptsError{Attempts: n, Err: err}
+		}
+		return nil, err
+	}
+	if res != nil {
+		res.Attempts = n
+	}
+	return res, nil
+}
+
+// AttemptsOf is how many times the paid request of the call that failed
+// with err was sent: 1 unless err holds an AttemptsError.
+func AttemptsOf(err error) int {
+	var ae *AttemptsError
+	if errors.As(err, &ae) && ae.Attempts > 1 {
+		return ae.Attempts
+	}
+	return 1
 }
 
 // Model is one entry from a provider's live model list.
