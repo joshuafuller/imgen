@@ -141,12 +141,6 @@ Every image in this README was made with imgen. More worked examples are in [Rec
 
 Gemini, OpenAI and Codex are tested with real images. The other API providers are checked in CI against each vendor's official OpenAPI spec. Details per provider: [Providers](docs/providers.md).
 
-## How it fits together
-
-![imgen components: the CLI and the MCP server share one command layer, which calls a provider backend through a guarded HTTP client or a child process, then validates, post-processes and saves the images.](docs/diagrams/architecture.svg)
-
-Each command turns flags into one provider-neutral request. A backend translates it for one vendor, and a shared layer validates, post-processes and saves the result. The MCP server runs the same code in-process. See [Architecture](docs/architecture.md).
-
 ## Use it from an AI agent
 
 - **Claude Code skill:** `make install-skill` links [`skills/imgen`](skills/imgen/SKILL.md) into `~/.claude/skills/imgen`. The agent calls `imgen` from the shell and loads reference pages only when it needs them.
