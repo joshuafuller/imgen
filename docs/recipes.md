@@ -137,7 +137,7 @@ Never ask the image model to fix text. It changes other details too.
 imgen qr https://github.com/joshuafuller/imgen "a calm koi pond with lily pads"
 ```
 
-imgen draws an exact QR code of the link (error correction H, a quiet zone of 4 modules, about 1024 px). Gemini then repaints it as the scene. imgen reads each module of the result and compares it with the true code. A try passes when fewer than 3% of the modules are wrong and no finder or timing module is wrong. imgen keeps the first try that passes, up to 3 tries (`-n`). If no try passes, imgen saves the best try, writes "It may not scan" on stderr and exits with 1.
+imgen draws an exact QR code of the link (error correction H, a quiet zone of 4 modules, about 1024 px). Gemini then repaints it as the scene. imgen reads each module of the result and compares it with the true code. A try passes when fewer than 3% of the modules are wrong and at most 2 modules of the finder, separator and timing patterns are clearly wrong. imgen keeps the first try that passes, up to 3 tries (`-n`). If no try passes, imgen saves the best try, writes "It may not scan" on stderr and exits with 1.
 
 ```sh
 imgen qr --safe -n 5 https://github.com/joshuafuller/imgen "an autumn forest with winding trails" \
@@ -147,9 +147,9 @@ imgen qr --safe -n 5 https://github.com/joshuafuller/imgen "an autumn forest wit
 - `--dark` and `--light` tell the model what the dark and the light modules become. Without them, the darkest and the palest parts of the scene take their places.
 - `--safe` paints a pale band about 2 modules wide around the code. Phones read the art without it, but strict readers such as zxing and OpenCV often need a light quiet zone.
 - `--guide-only` writes only the plain code and makes no API call. `-o -` writes the result to stdout.
-- Each try is one edit, about $0.067 on Gemini. `--dry-run` shows the request and the cost of one try.
+- Each try is one edit, about $0.067 on Gemini. `--dry-run` shows the cost of one try and of all `-n` tries.
 - Gemini is the default and gives the best art. OpenAI (`-p openai`) also scans, but looks more like a painted grid.
-- The check is strict on purpose. Look at the result, and scan it with a phone before you print it.
+- The check is a good guide, not a guarantee. Phones read more than desktop readers such as zxing. Scan the result with a phone before you print it.
 
 ## Batch jobs
 
