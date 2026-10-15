@@ -157,10 +157,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return p
 }
 
-// paidPolicy is apiPolicy for a request that can bill: it is never retried.
-func (c *Client) paidPolicy() httpx.Policy {
+// paidPolicy is apiPolicy for a request that can bill: it is sent again
+// only after a 429, and only on Higgsfield's own API host. sent counts each
+// time it is sent.
+func (c *Client) paidPolicy(sent *int) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid = true
+	p.Paid, p.Sent = true, sent
+	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
 
@@ -279,8 +282,19 @@ func (c *Client) checkModel(model string) error {
 
 // Generate submits the request, polls it, and downloads the images. Inputs
 // are uploaded first (the API takes public URLs only). Extra keys override
-// the mapped fields.
+// the mapped fields. Result.Attempts, or the error, counts the most times
+// one submit was sent: a model that makes one image per submit needs
+// several submits.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
+	most := 0
+	res, err := c.generate(ctx, req, &most)
+	return provider.Attempted(res, most, err)
+}
+
+// generate is Generate without the count: most keeps the most times one
+// submit was sent. The uploads, the polls and the downloads cannot bill and
+// are not counted.
+func (c *Client) generate(ctx context.Context, req provider.Request, most *int) (*provider.Result, error) {
 	model := req.Model
 	if model == "" {
 		model = defaultModel
@@ -324,7 +338,9 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 				delete(body, "batch_size")
 			}
 		}
-		imgs, err := c.run(ctx, model, body)
+		var sent int // each submit has its own count
+		imgs, err := c.run(ctx, model, body, &sent)
+		*most = max(*most, sent)
 		if err != nil {
 			return nil, err
 		}
@@ -407,18 +423,23 @@ type status struct {
 	} `json:"images"`
 }
 
-// run submits one generation, waits for it, and downloads its images.
-func (c *Client) run(ctx context.Context, model string, body map[string]any) ([]provider.Image, error) {
+// run submits one generation, waits for it, and downloads its images. sent
+// counts each time the submit was sent.
+func (c *Client) run(ctx context.Context, model string, body map[string]any, sent *int) ([]provider.Image, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
+	// One key per generation intent. The submit sends it again with every
+	// retry. A 429 created nothing, so the same key is right: if a response
+	// is lost, Higgsfield still returns the first request_id and does not
+	// charge a second time.
 	idem, err := newKey()
 	if err != nil {
 		return nil, err
 	}
 	var sub status
-	if err := c.call(ctx, c.paidPolicy(), http.MethodPost, c.base()+"/"+model, payload, idem, &sub); err != nil {
+	if err := c.call(ctx, c.paidPolicy(sent), http.MethodPost, c.base()+"/"+model, payload, idem, &sub); err != nil {
 		return nil, fmt.Errorf("higgsfield: submit: %w", err)
 	}
 	if sub.StatusURL == "" {
@@ -473,7 +494,8 @@ func (c *Client) call(ctx context.Context, pol httpx.Policy, method, target stri
 			// same request with the same key. Higgsfield returns the
 			// original request_id without creating or charging for another
 			// generation." (https://docs.higgsfield.ai/docs/concepts/idempotency.md,
-			// fetched 2026-10-15). imgen itself never repeats a submit.
+			// fetched 2026-10-15). imgen itself sends a submit again only
+			// after a 429 on the official host, with the same key (see run).
 			r.Header.Set("Idempotency-Key", idem)
 		}
 		return r, nil

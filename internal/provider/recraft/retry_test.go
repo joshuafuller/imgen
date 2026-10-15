@@ -7,12 +7,15 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/joshuafuller/imgen/internal/httpx"
+	"github.com/joshuafuller/imgen/internal/httpx/httpxtest"
 	"github.com/joshuafuller/imgen/internal/provider"
 )
 
@@ -123,9 +126,10 @@ func TestRetryPaidNetworkError(t *testing.T) {
 	}
 }
 
-// The paid request is sent once, whatever the status. After a 408 or a 5xx
-// the provider may have billed it, and the error says so; after a 429 the
-// error says when to run it again. Other statuses carry no hint.
+// On a custom endpoint the paid request is sent once, whatever the status.
+// After a 408 or a 5xx the provider may have billed it, and the error says
+// so; after a 429 the error says when to run it again. Other statuses carry
+// no hint.
 func TestRetryPaidStatus(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -187,6 +191,95 @@ func TestRetrySafeRequests(t *testing.T) {
 				if n := count(path); n != want {
 					t.Errorf("%d requests reached %s, want %d", n, path, want)
 				}
+			}
+		})
+	}
+}
+
+// The images of the official API are on another host than the API.
+const (
+	cdnHost = "img.recraft.ai"
+	cdnPath = "/x.png"
+)
+
+// official is a client on Recraft's own API host whose requests all reach a
+// test server. The paid endpoint answers with the statuses in paid, in order
+// (the last repeats; 200 is the normal answer, with one image), and the
+// download answers with download. posts returns how many paid requests
+// arrived. The client retries up to 3 times, fast.
+func official(t *testing.T, paid []int, download int) (c *Client, posts func() int) {
+	t.Helper()
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case genPath:
+			if r.Host != defaultHost {
+				t.Errorf("paid request to %s, want %s", r.Host, defaultHost)
+			}
+			if code := paid[min(int(n.Add(1)), len(paid))-1]; code != http.StatusOK {
+				w.WriteHeader(code)
+				_, _ = w.Write([]byte("busy"))
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"data":[{"url":"https://%s%s"}]}`, cdnHost, cdnPath)
+		case cdnPath:
+			if r.Host != cdnHost {
+				t.Errorf("download from %s, want %s", r.Host, cdnHost)
+			}
+			if download != http.StatusOK {
+				w.WriteHeader(download)
+				return
+			}
+			_, _ = w.Write(pngBytes(t))
+		default:
+			t.Errorf("unexpected request to %s%s", r.Host, r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c = New("k")
+	c.HTTP = httpxtest.Via(srv)
+	c.Retry = httpx.Policy{Attempts: 3, Base: time.Millisecond, Max: 2 * time.Millisecond}
+	return c, func() int { return int(n.Load()) }
+}
+
+// On Recraft's own API host the paid request is sent again after a 429, and
+// only after a 429, up to the retry attempts. Result.Attempts, or the error,
+// counts every request, so the caller can count each in the cost; that
+// includes a failure after the paid call, such as the download. The 429s
+// carry no Retry-After, so each retry waits 1 to 2 ms.
+func TestOfficial429Retried(t *testing.T) {
+	const rate, busy, fine = http.StatusTooManyRequests, http.StatusServiceUnavailable, http.StatusOK
+	for _, tc := range []struct {
+		name     string
+		paid     []int  // statuses of the paid endpoint, in order; the last repeats
+		download int    // status of the image download
+		posts    int    // paid requests that arrive
+		attempts int    // what Result.Attempts, or the error, counts
+		end      string // the end of the error; "" for success
+		cause    error  // what the error wraps
+	}{
+		{"429 429 200", []int{rate, rate, fine}, fine, 3, 3, "", nil},
+		{"429 three times", []int{rate}, fine, 3, 3, ". " + httpx.RateHintAfter("", 3), errHTTPStatus},
+		{"503", []int{busy, fine}, fine, 1, 1, ". " + httpx.PaidHint, errHTTPStatus},
+		{"429 then 200, then the download fails", []int{rate, fine}, http.StatusNotFound, 2, 2, "HTTP 404", errDownload},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, posts := official(t, tc.paid, tc.download)
+			res, err := c.Generate(context.Background(), provider.Request{Prompt: "p"})
+			if n := posts(); n != tc.posts {
+				t.Fatalf("%d paid requests, want %d (err %v)", n, tc.posts, err)
+			}
+			if tc.end == "" {
+				if err != nil || res.Attempts != tc.attempts || len(res.Images) != 1 {
+					t.Fatalf("res %+v err %v, want an image and %d attempts", res, err, tc.attempts)
+				}
+				return
+			}
+			if err == nil || !strings.HasSuffix(err.Error(), tc.end) || provider.AttemptsOf(err) != tc.attempts {
+				t.Fatalf("err %v (attempts %d), want it to end with %q and %d attempts", err, provider.AttemptsOf(err), tc.end, tc.attempts)
+			}
+			if !errors.Is(err, tc.cause) {
+				t.Errorf("err %q does not wrap %q", err, tc.cause)
 			}
 		})
 	}

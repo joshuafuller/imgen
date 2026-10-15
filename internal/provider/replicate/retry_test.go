@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joshuafuller/imgen/internal/httpx"
+	"github.com/joshuafuller/imgen/internal/httpx/httpxtest"
 	"github.com/joshuafuller/imgen/internal/provider"
 )
 
@@ -145,13 +147,14 @@ func TestPaidCreateServerErrorNotRetried(t *testing.T) {
 	}
 }
 
-// A 429 is not retried either: the provider controls the status, so it does
-// not prove that the create was not billed. The error says when to run it again.
+// On a custom endpoint a 429 is not retried either: the provider controls
+// the status, so it does not prove that the create was not billed. The error
+// says when to run it again.
 func TestPaidCreate429NotRetried(t *testing.T) {
 	c, count := flaky(t, map[string][]int{createPath: {http.StatusTooManyRequests}})
 	_, err := generate(c)
 	if n := count(createPath); n != 1 {
-		t.Errorf("create requests = %d, want 1: a request that can bill is never sent twice", n)
+		t.Errorf("create requests = %d, want 1: a request that can bill is sent once on a custom endpoint", n)
 	}
 	if !errors.Is(err, errHTTPStatus) || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("7")) {
 		t.Fatalf("err = %v, want the 429 status error, ending with the rate hint", err)
@@ -191,5 +194,109 @@ func TestFreeStatusErrorHasNoPaidHint(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), httpx.PaidHint) {
 		t.Errorf("a poll cannot bill, but its error says it may have: %q", err)
+	}
+}
+
+// official is a client on Replicate's own API host whose requests all reach
+// a test server. The server answers the creates with the statuses in create,
+// in order (the last repeats; 200 is the normal answer), and runs the rest of
+// the flow on Replicate hosts; with failPoll the poll answers 404. sent
+// returns how many creates arrived. The client retries up to 3 times, fast.
+func official(t *testing.T, create []int, failPoll bool) (c *Client, sent func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case createPath:
+			if r.Host != defaultHost {
+				t.Errorf("create to %s, want %s", r.Host, defaultHost)
+			}
+			mu.Lock()
+			n++
+			status := create[min(n, len(create))-1]
+			mu.Unlock()
+			if status != http.StatusOK {
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"detail":"fault"}`))
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"status":"starting","urls":{"get":"https://%s%s"}}`, defaultHost, pollPath)
+		case pollPath:
+			if failPoll {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"status":"succeeded","output":"https://replicate.delivery%s"}`, imagePath)
+		case imagePath:
+			_, _ = w.Write([]byte(pngMagic))
+		default:
+			t.Errorf("path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c = New("tok")
+	c.HTTP = httpxtest.Via(srv)
+	c.PollInterval = time.Millisecond
+	c.Retry = &httpx.Policy{Attempts: 3, Base: time.Millisecond, Max: 2 * time.Millisecond}
+	return c, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return n
+	}
+}
+
+// On Replicate's own API host the create is sent again after a 429, and only
+// after a 429. Result.Attempts counts every create. The 429s carry no
+// Retry-After, so each retry waits a millisecond or two.
+func TestOfficialCreate429Retried(t *testing.T) {
+	tooMany, fine := http.StatusTooManyRequests, http.StatusOK
+	c, sent := official(t, []int{tooMany, tooMany, fine}, false)
+	res, err := generate(c)
+	if n := sent(); n != 3 {
+		t.Fatalf("%d creates, want 3 (err %v)", n, err)
+	}
+	if err != nil || res.Attempts != 3 || len(res.Images) != 1 {
+		t.Fatalf("res %+v err %v, want an image and 3 attempts", res, err)
+	}
+}
+
+// On Replicate's own API host a 408 or a 5xx is still sent once: the
+// provider may have billed it, and the error says so. When every attempt is
+// rate limited, or a later step fails, the error still counts every create.
+func TestOfficialCreateFails(t *testing.T) {
+	tooMany, fine := http.StatusTooManyRequests, http.StatusOK
+	tests := []struct {
+		name     string
+		create   []int
+		failPoll bool
+		status   int    // the status in the error
+		creates  int    // creates that reach the server
+		attempts int    // the creates the error counts
+		end      string // the end of the error
+	}{
+		{"408 is not retried", []int{http.StatusRequestTimeout, fine}, false, 408, 1, 1, ". " + httpx.PaidHint},
+		{"500 is not retried", []int{http.StatusInternalServerError, fine}, false, 500, 1, 1, ". " + httpx.PaidHint},
+		{"503 is not retried", []int{http.StatusServiceUnavailable, fine}, false, 503, 1, 1, ". " + httpx.PaidHint},
+		{"429 on every attempt", []int{tooMany}, false, 429, 3, 3, ". " + httpx.RateHintAfter("", 3)},
+		{"429 then 200, then the poll fails", []int{tooMany, fine}, true, 404, 2, 2, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, sent := official(t, tc.create, tc.failPoll)
+			_, err := generate(c)
+			if n := sent(); n != tc.creates {
+				t.Fatalf("%d creates, want %d (err %v)", n, tc.creates, err)
+			}
+			if !errors.Is(err, errHTTPStatus) || !strings.Contains(err.Error(), strconv.Itoa(tc.status)) {
+				t.Fatalf("err %v, want a %d status error", err, tc.status)
+			}
+			if n := provider.AttemptsOf(err); n != tc.attempts {
+				t.Errorf("the error counts %d attempts, want %d", n, tc.attempts)
+			}
+			if !strings.HasSuffix(err.Error(), tc.end) {
+				t.Errorf("err %q, want it to end with %q", err, tc.end)
+			}
+		})
 	}
 }

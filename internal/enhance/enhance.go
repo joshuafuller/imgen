@@ -51,10 +51,14 @@ var (
 // retry is the HTTP retry policy; tests shrink it.
 var retry = httpx.DefaultPolicy()
 
-// paid is retry with Paid set: a call that bills is never retried.
-func paid() httpx.Policy {
+// newClient builds the guarded HTTP client of a backend. Tests replace it.
+var newClient = netguard.NewClient
+
+// paid is retry with Paid set: a call that bills is sent again only after a
+// 429, and only on the provider's own API host.
+func (b *backend) paid() httpx.Policy {
 	p := retry
-	p.Paid = true
+	p.Paid, p.Retry429 = true, b.official
 	return p
 }
 
@@ -78,6 +82,7 @@ type backend struct {
 	pol       netguard.Policy
 	keyHeader string
 	key       string
+	official  bool // the base URL is on the provider's own API host
 }
 
 // newBackend builds the client for base. The key may go only to defHost, or,
@@ -88,7 +93,7 @@ func newBackend(base, defHost, keyHeader, key string) *backend {
 	if u, err := url.Parse(base); err == nil && u.Hostname() != "" && !strings.EqualFold(u.Hostname(), defHost) {
 		pol = netguard.Policy{AuthHosts: []string{strings.ToLower(u.Hostname())}, PrivateHosts: []string{strings.ToLower(u.Hostname())}}
 	}
-	c := netguard.NewClient(pol, 60*time.Second)
+	c := newClient(pol, 60*time.Second)
 	inner := c.CheckRedirect
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if err := inner(req, via); err != nil {
@@ -99,7 +104,7 @@ func newBackend(base, defHost, keyHeader, key string) *backend {
 		}
 		return nil
 	}
-	return &backend{client: c, pol: pol, keyHeader: keyHeader, key: key}
+	return &backend{client: c, pol: pol, keyHeader: keyHeader, key: key, official: httpx.OfficialHost(base, defHost)}
 }
 
 // call sends one JSON request under the retry policy rp and decodes a 2xx body
@@ -259,7 +264,7 @@ func geminiPrompt(ctx context.Context, cfg Config, prompt string) (string, error
 			} `json:"content"`
 		} `json:"candidates"`
 	}
-	if err := call(ctx, b, http.MethodPost, base+"/models/"+model+":generateContent", body, paid(), &resp); err != nil {
+	if err := call(ctx, b, http.MethodPost, base+"/models/"+model+":generateContent", body, b.paid(), &resp); err != nil {
 		return "", err
 	}
 	var sb strings.Builder
@@ -307,7 +312,7 @@ func openaiPrompt(ctx context.Context, cfg Config, prompt string) (string, error
 		} `json:"output"`
 	}
 	b := newBackend(base, openaiHost, "Authorization", key)
-	if err := call(ctx, b, http.MethodPost, base+"/responses", body, paid(), &resp); err != nil {
+	if err := call(ctx, b, http.MethodPost, base+"/responses", body, b.paid(), &resp); err != nil {
 		return "", err
 	}
 	var sb strings.Builder

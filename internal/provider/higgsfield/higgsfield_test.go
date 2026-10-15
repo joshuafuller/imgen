@@ -126,6 +126,9 @@ func TestDefaultModelFlow(t *testing.T) {
 	if res.Model != "higgsfield-ai/soul/v2/standard" {
 		t.Errorf("model %q", res.Model)
 	}
+	if res.Attempts != 1 {
+		t.Errorf("attempts %d, want 1: the polls and the download are not counted", res.Attempts)
+	}
 	sub, ok := f.find(http.MethodPost, "/higgsfield-ai/soul/v2/standard")
 	if !ok {
 		t.Fatalf("no submit in %+v", f.log())
@@ -150,8 +153,8 @@ func TestDefaultModelFlow(t *testing.T) {
 	}
 }
 
-// The Idempotency-Key does not make imgen repeat a paid submit: a 429 is
-// the answer, after one request that carries the key.
+// On a custom endpoint the Idempotency-Key does not make imgen repeat a
+// paid submit: a 429 is the answer, after one request that carries the key.
 func TestIdempotencyKeySubmitSentOnce(t *testing.T) {
 	t.Setenv("IMGEN_RETRIES", "3")
 	var keys []string

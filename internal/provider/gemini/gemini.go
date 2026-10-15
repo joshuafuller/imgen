@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -42,7 +43,8 @@ type Client struct {
 	BaseURL string
 	HTTP    *http.Client
 	// Retry overrides httpx.DefaultPolicy when its Attempts is set. A
-	// generateContent call is still never retried.
+	// generateContent call is still sent again only after a 429 on the
+	// official API host.
 	Retry httpx.Policy
 
 	mu     sync.Mutex
@@ -123,10 +125,12 @@ func (c *Client) retryPolicy(inline bool) httpx.Policy {
 }
 
 // paidPolicy is the policy of a generateContent call, which bills: it is
-// never retried, whatever c.Retry says.
-func (c *Client) paidPolicy() httpx.Policy {
+// sent again only after a 429, and only on the official API host, whatever
+// c.Retry says. sent counts each time it is sent.
+func (c *Client) paidPolicy(sent *int) httpx.Policy {
 	pol := c.retryPolicy(true)
-	pol.Paid = true
+	pol.Paid, pol.Sent = true, sent
+	pol.Retry429 = httpx.OfficialHost(c.BaseURL, defaultHost)
 	return pol
 }
 
@@ -301,7 +305,9 @@ func parseResponse(resp *response, model string) (*provider.Result, error) {
 	return res, nil
 }
 
-// Generate runs a generateContent call.
+// Generate runs a generateContent call. Result.Attempts, or the error,
+// counts the most times one of the N requests was sent. It is above 1 only
+// after a 429 on the official API host.
 func (c *Client) Generate(ctx context.Context, r provider.Request) (*provider.Result, error) {
 	if err := provider.ValidModelID(r.Model); err != nil {
 		return nil, fmt.Errorf("gemini: %w", err)
@@ -314,28 +320,33 @@ func (c *Client) Generate(ctx context.Context, r provider.Request) (*provider.Re
 		return nil, err
 	}
 	// Image models reject candidateCount > 1, so -n N runs N calls at once.
+	// Each call has its own send counter, which is not safe to share.
 	n := max(r.N, 1)
 	results := make([]*provider.Result, n)
 	errs := make([]error, n)
+	sents := make([]int, n)
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Go(func() { results[i], errs[i] = c.generateOne(ctx, r.Model, body) })
+		wg.Go(func() { results[i], errs[i] = c.generateOne(ctx, r.Model, body, &sents[i]) })
 	}
 	wg.Wait()
-	if err := errors.Join(errs...); err != nil {
-		return nil, err
+	err = errors.Join(errs...)
+	if err == nil {
+		for _, res := range results[1:] {
+			results[0].Images = append(results[0].Images, res.Images...)
+		}
 	}
-	out := results[0]
-	for _, res := range results[1:] {
-		out.Images = append(out.Images, res.Images...)
-	}
-	return out, nil
+	// Attempts is the most sends of one request, so the estimate times
+	// Attempts never counts too few.
+	return provider.Attempted(results[0], slices.Max(sents), err)
 }
 
-func (c *Client) generateOne(ctx context.Context, model string, body []byte) (*provider.Result, error) {
+// generateOne runs one generateContent request; sent counts each time it is
+// sent.
+func (c *Client) generateOne(ctx context.Context, model string, body []byte, sent *int) (*provider.Result, error) {
 	u := fmt.Sprintf("%s/models/%s:generateContent", c.BaseURL, model)
 	var resp response
-	if err := c.do(ctx, http.MethodPost, u, body, &resp, c.paidPolicy()); err != nil {
+	if err := c.do(ctx, http.MethodPost, u, body, &resp, c.paidPolicy(sent)); err != nil {
 		return nil, err
 	}
 	return parseResponse(&resp, model)

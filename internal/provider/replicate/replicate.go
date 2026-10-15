@@ -56,7 +56,8 @@ type Client struct {
 	PollInterval time.Duration
 	// Retry overrides the retry and size policy; nil means httpx.DefaultPolicy.
 	// Downloads use it too, but keep their own (larger) size limit unless
-	// Retry.MaxBytes is set. The prediction create is still never retried.
+	// Retry.MaxBytes is set. The prediction create is still sent again only
+	// after a 429, and only on the official API host.
 	Retry *httpx.Policy
 
 	mu      sync.Mutex
@@ -126,10 +127,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return httpx.DefaultPolicy()
 }
 
-// paidPolicy is apiPolicy for a request that can bill: it is never retried.
-func (c *Client) paidPolicy() httpx.Policy {
+// paidPolicy is apiPolicy for a request that can bill: it is sent again
+// only after a 429, and only on Replicate's own API host. sent counts each
+// time it is sent.
+func (c *Client) paidPolicy(sent *int) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid = true
+	p.Paid, p.Sent = true, sent
+	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
 
@@ -196,7 +200,15 @@ type prediction struct {
 }
 
 // Generate runs the model in req.Model and downloads its output files.
+// Result.Attempts, or the error, counts each time the create was sent.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
+	sent := 0
+	res, err := c.generate(ctx, req, &sent)
+	return provider.Attempted(res, sent, err)
+}
+
+// generate is Generate without the count: sent counts the creates.
+func (c *Client) generate(ctx context.Context, req provider.Request, sent *int) (*provider.Result, error) {
 	if err := provider.ValidModelID(req.Model); err != nil {
 		return nil, fmt.Errorf("replicate: %w", err)
 	}
@@ -215,7 +227,7 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.call(ctx, c.paidPolicy(), http.MethodPost, c.base()+path, buf)
+	body, err := c.call(ctx, c.paidPolicy(sent), http.MethodPost, c.base()+path, buf)
 	if err != nil {
 		return nil, err
 	}

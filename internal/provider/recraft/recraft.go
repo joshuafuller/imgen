@@ -54,7 +54,8 @@ type Client struct {
 	HTTP         *http.Client
 	NameOverride string
 	// Retry overrides the retry and size limits; zero fields keep the defaults.
-	// The paid request is still never retried.
+	// The paid request is still sent again only after a 429 on the official
+	// API host.
 	Retry httpx.Policy
 }
 
@@ -112,10 +113,13 @@ func (c *Client) httpc(p netguard.Policy) *http.Client {
 
 func (c *Client) apiPolicy() httpx.Policy { return c.merge(httpx.DefaultPolicy()) }
 
-// paidPolicy is apiPolicy for a request that can bill: it is never retried.
-func (c *Client) paidPolicy() httpx.Policy {
+// paidPolicy is apiPolicy for a request that can bill: it is sent again
+// only after a 429, and only on Recraft's own API host, whatever c.Retry
+// says. sent counts each time it is sent.
+func (c *Client) paidPolicy(sent *int) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid = true
+	p.Paid, p.Sent = true, sent
+	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
 
@@ -145,7 +149,15 @@ func (c *Client) ListModels(context.Context) ([]provider.Model, error) {
 
 // Generate creates or edits images. One input image calls imageToImage; one
 // input plus a mask calls inpaint. Both are documented for V3 models only.
+// Result.Attempts, or the error, counts each time the paid request was sent.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
+	sent := 0
+	res, err := c.generate(ctx, req, &sent)
+	return provider.Attempted(res, sent, err)
+}
+
+// generate is Generate without the count: sent counts the paid requests.
+func (c *Client) generate(ctx context.Context, req provider.Request, sent *int) (*provider.Result, error) {
 	if req.Model != "" {
 		if err := provider.ValidModelID(req.Model); err != nil {
 			return nil, fmt.Errorf("recraft: %w", err)
@@ -165,7 +177,7 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 	}
 	pol := c.policy()
 	hc := c.httpc(pol)
-	resp, err := c.post(ctx, hc, pol, path, buf, "application/json")
+	resp, err := c.post(ctx, hc, pol, path, buf, "application/json", sent)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +254,10 @@ func dataURL(img provider.Image) string {
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(img.Data)
 }
 
-// post sends one authenticated API request and returns the 2xx body.
-func (c *Client) post(ctx context.Context, hc *http.Client, pol netguard.Policy, path string, buf []byte, ctype string) ([]byte, error) {
+// post sends an authenticated API request and returns the 2xx body. The
+// request is sent again only after a 429 on the official API host; sent
+// counts each time it is sent.
+func (c *Client) post(ctx context.Context, hc *http.Client, pol netguard.Policy, path string, buf []byte, ctype string, sent *int) ([]byte, error) {
 	target := c.base() + path
 	if u, perr := url.Parse(target); perr != nil || !pol.MayAuth(u) {
 		return nil, errNoAuth
@@ -256,7 +270,7 @@ func (c *Client) post(ctx context.Context, hc *http.Client, pol netguard.Policy,
 		r.Header.Set("Authorization", "Bearer "+c.APIKey)
 		r.Header.Set("Content-Type", ctype)
 		return r, nil
-	}, c.paidPolicy())
+	}, c.paidPolicy(sent))
 	if err != nil {
 		return nil, fmt.Errorf("recraft: request: %w", err)
 	}

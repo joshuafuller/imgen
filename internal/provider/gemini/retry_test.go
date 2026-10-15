@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/joshuafuller/imgen/internal/httpx"
+	"github.com/joshuafuller/imgen/internal/httpx/httpxtest"
 	"github.com/joshuafuller/imgen/internal/provider"
 )
 
@@ -27,9 +29,9 @@ func resetConn(t *testing.T, w http.ResponseWriter) {
 	_ = conn.Close()
 }
 
-// A generateContent call can bill, so it is never sent twice. After a
-// failure that the API may have billed (a network error, a 408 or a 5xx)
-// the error says why; after a 429 it says when to run it again.
+// On a custom endpoint a generateContent call can bill, so it is never sent
+// twice. After a failure that the API may have billed (a network error, a
+// 408 or a 5xx) the error says why; after a 429 it says when to run it again.
 func TestPaidCallNotRetried(t *testing.T) {
 	reply := func(code int, body string) func(*testing.T, http.ResponseWriter) {
 		return func(_ *testing.T, w http.ResponseWriter) {
@@ -96,5 +98,93 @@ func TestListModelsRetried(t *testing.T) {
 	ms, err := c.ListModels(context.Background())
 	if err != nil || len(ms) != 1 || calls.Load() != 2 {
 		t.Fatalf("models %v err %v calls %d", ms, err, calls.Load())
+	}
+}
+
+// officialClient talks to the official API host, but every request reaches
+// srv. Its retries wait 1 to 2 ms.
+func officialClient(srv *httptest.Server) *Client {
+	c := New("k")
+	c.HTTP = httpxtest.Via(srv)
+	c.Retry = fastRetry()
+	return c
+}
+
+// answer replies to one request.
+type answer func(*testing.T, http.ResponseWriter)
+
+// answers lists the answers to the requests, in order; the last one repeats.
+func answers(a ...answer) []answer { return a }
+
+// fail answers with a status and an error body. It sets no Retry-After, so
+// a retry after a 429 waits the 1 to 2 ms backoff, not seconds.
+func fail(code int) answer {
+	return func(_ *testing.T, w http.ResponseWriter) {
+		w.WriteHeader(code)
+		_, _ = w.Write([]byte(`{"error":{"message":"Resource has been exhausted."}}`))
+	}
+}
+
+// image answers 200 with one inline image.
+func image(_ *testing.T, w http.ResponseWriter) {
+	data := base64.StdEncoding.EncodeToString([]byte("\x89PNG"))
+	_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"` + data + `"}}]}}]}`))
+}
+
+// noOutput answers 200 with a response that has no image and no text.
+func noOutput(_ *testing.T, w http.ResponseWriter) {
+	_, _ = w.Write([]byte(`{"candidates":[]}`))
+}
+
+// On the official API a generateContent call is sent again after a 429, and
+// only after a 429, up to the retry attempts. Result.Attempts, or the error,
+// counts the most times one request was sent, so the caller can count each
+// in the cost; that includes a failure after the paid call, such as a
+// response with no image. With -n 2 the two requests run at once.
+func TestOfficial429Retried(t *testing.T) {
+	const path = "/v1beta/models/m:generateContent"
+	rate := fail(http.StatusTooManyRequests)
+	cases := []struct {
+		name     string
+		n        int // images asked for, one request each
+		answers  []answer
+		calls    int
+		attempts int
+		end      string // the end of the error; "" for success
+	}{
+		{"429 429 200", 1, answers(rate, rate, image), 3, 3, ""},
+		{"n=2, one request gets a 429", 2, answers(rate, image), 3, 2, ""},
+		{"429 three times", 1, answers(rate), 3, 3, ". " + httpx.RateHintAfter("", 3)},
+		{"n=2, 429 every time", 2, answers(rate), 6, 3, ". " + httpx.RateHintAfter("", 3)},
+		{"429 then a response with no image", 1, answers(rate, noOutput), 2, 2, errNoOutput.Error()},
+		{"503", 1, answers(fail(http.StatusServiceUnavailable), image), 1, 1, ". " + httpx.PaidHint},
+		{"408", 1, answers(fail(http.StatusRequestTimeout), image), 1, 1, ". " + httpx.PaidHint},
+		{"network error", 1, answers(resetConn, image), 1, 1, ". " + httpx.PaidHint},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Host != defaultHost || r.URL.Path != path {
+					t.Errorf("request to %s%s, want %s%s", r.Host, r.URL.Path, defaultHost, path)
+				}
+				n := int(calls.Add(1))
+				tc.answers[min(n, len(tc.answers))-1](t, w)
+			}))
+			defer srv.Close()
+			res, err := officialClient(srv).Generate(context.Background(), provider.Request{Model: "m", Prompt: "p", N: tc.n})
+			if int(calls.Load()) != tc.calls {
+				t.Fatalf("calls %d, want %d (err %v)", calls.Load(), tc.calls, err)
+			}
+			if tc.end == "" {
+				if err != nil || res.Attempts != tc.attempts || len(res.Images) != tc.n {
+					t.Fatalf("res %+v err %v, want %d images and %d attempts", res, err, tc.n, tc.attempts)
+				}
+				return
+			}
+			if err == nil || !strings.HasSuffix(err.Error(), tc.end) || provider.AttemptsOf(err) != tc.attempts {
+				t.Fatalf("err %v (attempts %d), want it to end with %q and %d attempts", err, provider.AttemptsOf(err), tc.end, tc.attempts)
+			}
+		})
 	}
 }

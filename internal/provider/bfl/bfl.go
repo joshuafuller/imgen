@@ -57,7 +57,8 @@ type Client struct {
 	PollInterval time.Duration
 	// Retry overrides the retry and size policy; nil means httpx.DefaultPolicy.
 	// Downloads use it too, but keep their own (larger) size limit unless
-	// Retry.MaxBytes is set. The submit POST is still never retried.
+	// Retry.MaxBytes is set. The submit POST is still sent again only after a
+	// 429, and only on the official API host.
 	Retry *httpx.Policy
 
 	mu      sync.Mutex
@@ -128,10 +129,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return httpx.DefaultPolicy()
 }
 
-// paidPolicy is apiPolicy for a request that can bill: it is never retried.
-func (c *Client) paidPolicy() httpx.Policy {
+// paidPolicy is apiPolicy for a request that can bill: it is sent again
+// only after a 429, and only on BFL's own API host. sent counts each time
+// it is sent.
+func (c *Client) paidPolicy(sent *int) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid = true
+	p.Paid, p.Sent = true, sent
+	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
 
@@ -219,7 +223,16 @@ const fillModel = "flux-pro-1.0-fill"
 // Generate submits one task per requested image, polls each, and downloads the results.
 // Field names follow the per-model schema in the official OpenAPI spec. A mask
 // routes to the fill endpoint (image + mask inpainting).
+// Result.Attempts, or the error, is the most times one submit was sent.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
+	most := 0
+	res, err := c.generate(ctx, req, &most)
+	return provider.Attempted(res, most, err)
+}
+
+// generate is Generate without the count: most ends as the most times one
+// submit was sent, so that the cost of the call is never undercounted.
+func (c *Client) generate(ctx context.Context, req provider.Request, most *int) (*provider.Result, error) {
 	model := req.Model
 	if model == "" {
 		model = defaultModel
@@ -249,7 +262,9 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 	n := max(req.N, 1)
 	res := &provider.Result{Model: model}
 	for range n {
-		img, err := c.one(ctx, model, buf)
+		sent := 0
+		img, err := c.one(ctx, model, buf, &sent)
+		*most = max(*most, sent)
 		if err != nil {
 			return nil, err
 		}
@@ -364,7 +379,9 @@ func dimensions(sh shape, req provider.Request) (w, h int, err error) {
 	return snap(int(fw)), snap(int(area / fw)), nil
 }
 
-func (c *Client) one(ctx context.Context, model string, payload []byte) (provider.Image, error) {
+// one submits a task, polls it and downloads its image. sent counts each
+// time the submit was sent.
+func (c *Client) one(ctx context.Context, model string, payload []byte, sent *int) (provider.Image, error) {
 	status, resp, hint, err := httpx.SendHint(c.httpc(), func() (*http.Request, error) {
 		r, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base()+"/v1/"+model, bytes.NewReader(payload))
 		if err != nil {
@@ -373,7 +390,7 @@ func (c *Client) one(ctx context.Context, model string, payload []byte) (provide
 		c.headers(r)
 		r.Header.Set("Content-Type", "application/json")
 		return r, nil
-	}, c.paidPolicy())
+	}, c.paidPolicy(sent))
 	if err != nil {
 		return provider.Image{}, fmt.Errorf("bfl: submit: %w", err)
 	}

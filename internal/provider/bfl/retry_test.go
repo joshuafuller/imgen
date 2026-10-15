@@ -7,12 +7,15 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/joshuafuller/imgen/internal/httpx"
+	"github.com/joshuafuller/imgen/internal/httpx/httpxtest"
 	"github.com/joshuafuller/imgen/internal/provider"
 )
 
@@ -127,9 +130,9 @@ func TestRetryPaidNetworkError(t *testing.T) {
 	}
 }
 
-// The submit is sent once, whatever the status. After a 408 or a 5xx the
-// provider may have billed it, and the error says so; after a 429 the error
-// says when to run it again. Other statuses carry no hint.
+// On a custom endpoint the submit is sent once, whatever the status. After a
+// 408 or a 5xx the provider may have billed it, and the error says so; after
+// a 429 the error says when to run it again. Other statuses carry no hint.
 func TestRetryPaidStatus(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -139,7 +142,7 @@ func TestRetryPaidStatus(t *testing.T) {
 	}{
 		{"503 is not retried", []step{code(http.StatusServiceUnavailable), ok}, 1, ". " + httpx.PaidHint},
 		{"400 has no hint", []step{code(http.StatusBadRequest), ok}, 0, "busy"},
-		{"429 is not retried", []step{limited, ok}, 0, ". " + httpx.RateHint("7")},
+		{"429 is not retried on a custom endpoint", []step{limited, ok}, 0, ". " + httpx.RateHint("7")},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,6 +199,137 @@ func TestRetrySafeRequests(t *testing.T) {
 				if n := count(path); n != want {
 					t.Errorf("%d requests reached %s, want %d", n, path, want)
 				}
+			}
+		})
+	}
+}
+
+// official is a client on BFL's own API host whose requests all reach a test
+// server. The server answers the submits with the statuses in submit, in
+// order (the last repeats; 200 is the normal answer), and runs the rest of
+// the flow on BFL hosts; with failPoll the poll answers 404. sent returns how
+// many submits arrived. The client retries up to 3 times, fast.
+func official(t *testing.T, submit []int, failPoll bool) (c *Client, sent func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case submitPath:
+			if r.Host != defaultHost {
+				t.Errorf("submit to %s, want %s", r.Host, defaultHost)
+			}
+			mu.Lock()
+			n++
+			status := submit[min(n, len(submit))-1]
+			mu.Unlock()
+			if status != http.StatusOK {
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte("busy"))
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"id":"i","polling_url":"https://api.eu1.bfl.ai%s"}`, pollPath)
+		case pollPath:
+			if failPoll {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"status":"Ready","result":{"sample":"https://delivery-eu.bfl.ai%s"}}`, imgPath)
+		case imgPath:
+			_, _ = w.Write([]byte(pngMagic))
+		default:
+			t.Errorf("path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c = New("k")
+	c.HTTP = httpxtest.Via(srv)
+	c.PollInterval = time.Millisecond
+	c.Retry = &httpx.Policy{Attempts: 3, Base: time.Millisecond, Max: 2 * time.Millisecond}
+	return c, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return n
+	}
+}
+
+// generateN asks for n images, and gives up after 10 seconds.
+func generateN(c *Client, n int) (*provider.Result, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return c.Generate(ctx, provider.Request{Prompt: "p", N: n})
+}
+
+// On BFL's own API host the submit is sent again after a 429, and only after
+// a 429. Result.Attempts is the most times one submit was sent: with several
+// images each submit counts alone, so the retries of one do not add to the
+// count of another. The 429s carry no Retry-After, so each retry waits a
+// millisecond or two.
+func TestOfficialSubmit429Retried(t *testing.T) {
+	tooMany, fine := http.StatusTooManyRequests, http.StatusOK
+	tests := []struct {
+		name     string
+		submit   []int // the status of each submit that arrives, in order; the last repeats
+		n        int   // images asked for
+		submits  int   // submits that reach the server
+		attempts int   // the most times one submit was sent
+	}{
+		{"429 429 200", []int{tooMany, tooMany, fine}, 1, 3, 3},
+		{"two images, the first submit retried", []int{tooMany, fine}, 2, 3, 2},
+		{"two images, the second submit retried", []int{fine, tooMany, fine}, 2, 3, 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, sent := official(t, tc.submit, false)
+			res, err := generateN(c, tc.n)
+			if n := sent(); n != tc.submits {
+				t.Fatalf("%d submits, want %d (err %v)", n, tc.submits, err)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Images) != tc.n || res.Attempts != tc.attempts {
+				t.Errorf("%d images and %d attempts, want %d and %d", len(res.Images), res.Attempts, tc.n, tc.attempts)
+			}
+		})
+	}
+}
+
+// On BFL's own API host a 408 or a 5xx is still sent once: the provider may
+// have billed it, and the error says so. When every attempt is rate limited,
+// or a later step fails, the error still counts every submit.
+func TestOfficialSubmitFails(t *testing.T) {
+	tooMany, fine := http.StatusTooManyRequests, http.StatusOK
+	tests := []struct {
+		name     string
+		submit   []int
+		failPoll bool
+		status   int    // the status in the error
+		submits  int    // submits that reach the server
+		attempts int    // the submits the error counts
+		end      string // the end of the error
+	}{
+		{"408 is not retried", []int{http.StatusRequestTimeout, fine}, false, 408, 1, 1, ". " + httpx.PaidHint},
+		{"500 is not retried", []int{http.StatusInternalServerError, fine}, false, 500, 1, 1, ". " + httpx.PaidHint},
+		{"503 is not retried", []int{http.StatusServiceUnavailable, fine}, false, 503, 1, 1, ". " + httpx.PaidHint},
+		{"429 on every attempt", []int{tooMany}, false, 429, 3, 3, ". " + httpx.RateHintAfter("", 3)},
+		{"429 then 200, then the poll fails", []int{tooMany, fine}, true, 404, 2, 2, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, sent := official(t, tc.submit, tc.failPoll)
+			_, err := generateN(c, 1)
+			if n := sent(); n != tc.submits {
+				t.Fatalf("%d submits, want %d (err %v)", n, tc.submits, err)
+			}
+			if !errors.Is(err, errHTTPStatus) || !strings.Contains(err.Error(), strconv.Itoa(tc.status)) {
+				t.Fatalf("err %v, want a %d status error", err, tc.status)
+			}
+			if n := provider.AttemptsOf(err); n != tc.attempts {
+				t.Errorf("the error counts %d attempts, want %d", n, tc.attempts)
+			}
+			if !strings.HasSuffix(err.Error(), tc.end) {
+				t.Errorf("err %q, want it to end with %q", err, tc.end)
 			}
 		})
 	}
