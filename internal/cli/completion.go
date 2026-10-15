@@ -25,7 +25,7 @@ var (
 	aspectValues     = []string{"1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16", "21:9"}
 )
 
-var commandNames = []string{"gen", "edit", "batch", "compare", "upscale", "interactive", "rerun", "history", "styles", "profiles", "init", "models", "providers", "doctor", "completion", "version", "help"}
+var commandNames = []string{"gen", "edit", "batch", "compare", "upscale", "qr", "interactive", "rerun", "history", "styles", "profiles", "init", "models", "providers", "doctor", "completion", "version", "help"}
 
 // flagWords returns every flag of the gen set as -x / --long words, sorted.
 func flagWords() []string {
@@ -37,6 +37,9 @@ func flagWords() []string {
 	fs.Bool("cost", false, "")
 	fs.String("since", "", "")
 	fs.Bool("names", false, "")
+	for _, n := range []string{"safe", "guide-only", "dark", "light"} {
+		fs.Bool(n, false, "")
+	}
 	addAliases(fs)
 	var words []string
 	fs.VisitAll(func(f *flag.Flag) {
@@ -75,7 +78,7 @@ _imgen() {
   esac
   case "${COMP_WORDS[1]}" in
     completion) COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") ) ;;
-    gen|edit|batch|compare|upscale|rerun|history|styles|profiles|models|providers) COMPREPLY=( $(compgen -W "%[2]s" -- "$cur") ) ;;
+    gen|edit|batch|compare|upscale|qr|rerun|history|styles|profiles|models|providers) COMPREPLY=( $(compgen -W "%[2]s" -- "$cur") ) ;;
   esac
 }
 complete -o default -F _imgen imgen
@@ -103,7 +106,7 @@ _imgen() {
   esac
   case "$words[2]" in
     completion) compadd bash zsh fish ;;
-    gen|edit|batch|compare|upscale|rerun|history|styles|profiles|models|providers) compadd -- $flags ;;
+    gen|edit|batch|compare|upscale|qr|rerun|history|styles|profiles|models|providers) compadd -- $flags ;;
   esac
 }
 _imgen "$@"
