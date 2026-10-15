@@ -101,6 +101,15 @@ type Provider interface {
 	ListModels(ctx context.Context) ([]Model, error)
 }
 
+// Streamer is implemented by backends that can send rough partial images
+// while the final one renders. Partials are for display only: the Result
+// holds the final images, as from Generate. A backend calls onPartial from
+// the calling goroutine, only with images that passed the header checks,
+// and may fall back to a plain Generate (no partials) for any request.
+type Streamer interface {
+	GenerateStream(ctx context.Context, req Request, onPartial func(Image)) (*Result, error)
+}
+
 // Config describes one configured provider instance. Built-in instances
 // ("gemini", "openai", "codex") and user-defined ones from the rules file
 // (e.g. a local OpenAI-compatible server, or an exec plugin) share this shape.
