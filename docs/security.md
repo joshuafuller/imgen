@@ -51,7 +51,7 @@ Every HTTP client in imgen is built by one package with one policy.
 
 ### A custom base_url is a trust decision
 
-When you set `base_url` for a provider (for example a local OpenAI-compatible server), imgen sends your key to that host and allows plain http and private addresses for that exact host only. Download, upload and poll URLs that the server returns on any other host still get the strict policy. Point `base_url` only at a server that you run or trust.
+When you set `base_url` for a provider (for example a local OpenAI-compatible server), imgen sends your key to that host and allows plain http and private addresses for that exact host only. Download, upload and poll URLs that the server returns on any other host still get the strict policy. imgen ignores the token counts that such a server reports, so it cannot lower the spend that the budget sees: its calls count at their top price. Point `base_url` only at a server that you run or trust.
 
 ### Input URLs
 

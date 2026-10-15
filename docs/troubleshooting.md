@@ -53,7 +53,7 @@ Start with `imgen doctor`. It checks the rules file, the key file, each provider
 
 | Message | Fix |
 |---|---|
-| `over budget: spent or held $X of $Y today (next call ~$Z) (use --force to override)` | Today's spend plus this call passes `IMGEN_BUDGET`. Wait for tomorrow, raise the budget, or add `--force`. |
+| `over budget: spent or held $X of $Y today (next call ~$Z) (use --force to override)` | Today's spend plus this call's top price passes `IMGEN_BUDGET`. When the API picks the size or quality, the top price uses the dearest, so set `-r` and `-q`. Or wait for tomorrow, raise the budget, or add `--force`. |
 | `over budget: the price of this call is unknown (use --force to override)` | With a budget set, imgen refuses calls it cannot price. Use `--force`, or add the model to a price file in `IMGEN_PRICES`. |
 
 See [Configuration](configuration.md#daily-budget).

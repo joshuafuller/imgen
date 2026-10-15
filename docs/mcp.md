@@ -227,12 +227,12 @@ Each `generate_image` or `edit_image` call goes through these checks, in this or
 
 1. **Disk cap.** The worst-case output must fit in what is left of `IMGEN_MCP_MAX_BYTES`. Otherwise the call is refused before it runs.
 2. **Call cap.** The call is counted against `IMGEN_MCP_MAX_CALLS`. Past the cap, it is refused. A call that a later check refuses still uses up its slot.
-3. **Budget.** When a session budget is active, imgen first runs the call as a dry run to get a price. A call with an unknown price is refused. A call is also refused when the session spend plus its estimate would pass `IMGEN_MCP_BUDGET`.
+3. **Budget.** When a session budget is active, imgen first runs the call as a dry run to get its top price. A call with an unknown price is refused. A call is also refused when the session spend plus that amount would pass `IMGEN_MCP_BUDGET`.
 4. **Run.** The call runs with its own deadline (`IMGEN_MCP_TIMEOUT`). The remaining byte allowance goes into the CLI, which checks it before it writes each file.
 
 After the run:
 
-- Spend: the real cost is added when the call succeeded and its cost is known. Otherwise the estimate is added, because the provider may have billed a failed call.
+- Spend: the call's cost is added when the call succeeded and its cost is known. Otherwise the amount from the dry run is added, because the provider may have billed a failed call.
 - Bytes: the size on disk of each saved file is added. Sidecars and grids that the CLI writes count too.
 
 The worst case per image for the disk check is 64 MiB. With `resize`, `denoise` or `remove_bg` it adds `width x height x 4` bytes plus 1 MiB for the post-processed copy. `remove_bg`, or `denoise` without `resize`, uses the pixel limit (`IMGEN_MAX_PIXELS`, default 40,000,000). At the defaults, `remove_bg` or `denoise` alone needs about 228 MB per image, so a first call with `n` of 3 or more and one of these options is refused under the default 512 MiB cap. With `denoise`, add `resize`. `resize` does not lower the bound for `remove_bg`. For both, you can raise `IMGEN_MCP_MAX_BYTES`.

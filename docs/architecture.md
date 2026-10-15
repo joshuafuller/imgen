@@ -13,7 +13,7 @@ imgen is one Go binary with one external dependency (`golang.org/x/image`). A th
 3. **Prompt.** The prompt comes from the words, `-P file` or stdin. `--enhance` rewrites it with a text model; `--style` texts are appended; `--remove-bg` adds the green-screen instruction.
 4. **Inputs.** Each `-i` and `--mask` (a path, a URL through `fetch`, or `clip:`) is size-capped and checked by `imgcheck` before any decoder sees it.
 5. **Model.** `-m`, else the instance `default_model`. `-m latest` asks the provider for its model list and picks the newest one that the `deny` list allows.
-6. **Budget and cache.** With `--cache`, a hit returns stored images. Otherwise `pricing` estimates the cost and `history` reserves it against `IMGEN_BUDGET` under a file lock.
+6. **Budget and cache.** With `--cache`, a hit returns stored images. Otherwise `pricing` gives the call's top price and `history` holds it against `IMGEN_BUDGET` under a file lock. After the call, the tokens the official API reports set the cost that the history records.
 7. **Provider call.** The backend builds the vendor request. HTTP goes through `httpx` (retries, size caps) on a client from `netguard` (address and credential rules). Codex and exec plugins run as child processes with a minimal environment from `subenv`.
 8. **Validation.** Every returned image is checked by `imgcheck`: real type from the bytes, pixel limits, and an allowlist for SVG.
 9. **Post-processing.** `post` runs denoise, then remove-bg, then crop, then resize.
@@ -50,7 +50,7 @@ imgen is one Go binary with one external dependency (`golang.org/x/image`). A th
 | `internal/sheet` | Labelled contact sheets for `--grid`, `batch --grid` and `compare`. |
 | `internal/pngmeta` | Text metadata in PNG and JPEG files. |
 | `internal/naming` | File names from prompts. |
-| `internal/pricing` | Cost estimates from an embedded price table (`IMGEN_PRICES` overrides). |
+| `internal/pricing` | Prices from an embedded table (`IMGEN_PRICES` overrides): a call's top price, and the cost of the tokens an API reports. |
 | `internal/history` | Append-only JSONL history, spend totals and budget reservations. |
 | `internal/cache` | On-disk result cache for `--cache`. |
 | `internal/enhance` | Prompt rewriting with a Gemini or OpenAI text model. |

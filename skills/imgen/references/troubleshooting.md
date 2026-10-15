@@ -19,7 +19,7 @@ Run `imgen doctor` first. It checks the binary, the key file, each provider inst
 | `not supported by this provider: mask` | Gemini, Codex and Higgsfield have no masked edit | use `-p openai` (or ideogram, recraft, bfl, replicate, fal) |
 | transparent background is opaque | Gemini/Codex have no alpha | `-p openai -b transparent -f png`, or `--remove-bg` (green-screen key) |
 | `chroma key: image corners are not green; background is not a flat #00FF00` | `--remove-bg`: the model drew a scene or an uneven background (long prompt, busy photo) | shorter prompt, plain subject, `-r 1K`; add `--cache` to keep the paid image; or `-p openai -b transparent -f png` |
-| the OpenAI bill is higher than imgen's estimate | sizes above 1536 px are priced like 1024 px, and an edit's input images are not counted | treat those estimates as low; check the OpenAI usage page |
+| `--dry-run` or `over budget` shows more than the call costs | the price held before a call is its top price: the dearest size and quality when the API picks them | set `-q` and `-r`; `imgen history --cost` shows what each call cost |
 | text in the image is garbled | model limit | never fix it by regenerating; use plate + overlay ([recipes.md](recipes.md#plate--overlay-diagrams-maps-labeled-slides)) |
 | `-m latest` picked an odd model | deny list / version sort | pin `-m <id>`; add a `deny` glob in the rules file |
 | timeout | slow model or big size | `--timeout 10m`; use a smaller `-r` for drafts |

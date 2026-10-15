@@ -16,7 +16,7 @@ You need `imgen` with an OpenAI key (`imgen init`) and `uv`. Without `uv`, Pytho
    DRY_RUN=1 ./make_listing.sh sample/mug-photo.jpg out
    ```
 
-2. Make the set. It is one cutout and five scenes: six calls. imgen estimates about $0.04 in all, but the real cost is higher (see the notes: expect about $0.10 to $0.20). The calls run one after another, so it takes about 100 seconds:
+2. Make the set. It is one cutout and five scenes: six calls. Before each call imgen holds its top price, about $0.07 (about $0.41 for the set). The real cost is lower: expect about $0.10 to $0.20 for the set (see the notes). The calls run one after another, so it takes about 100 seconds:
 
    ```text
    ./make_listing.sh sample/mug-photo.jpg out
@@ -68,7 +68,7 @@ You need `imgen` with an OpenAI key (`imgen init`) and `uv`. Without `uv`, Pytho
 
 ## The sample photo
 
-The photo was made with imgen too (one call, about $0.006, and no input image, so the estimate is close):
+The photo was made with imgen too (one call, about $0.006):
 
 ```text
 imgen gen -p openai -q low -r 1024x1024 -f jpeg --name mug-photo \
@@ -123,6 +123,6 @@ The full-size files are not in this repository. It holds the input photo and two
 - **The Gemini route works, but it failed on this photo with long prompts.** `--remove-bg` asks for a flat green background and keys it out. Two long prompts that listed what to remove failed. The first left the tabletop in the picture, so the key found almost no background (the check said "0% transparent"). The second ended with imgen's error `chroma key: image corners are not green; background is not a flat #00FF00`. Both calls were billed (about $0.10 each at 2K). The short prompt in the script worked at 1K on the first try, and `overview-gemini.jpg` shows it: the cutout, the `studio` scene and the main image. Only the cutout and one scene were made on Gemini. A whole Gemini set would cost about $0.40.
 - **The Gemini cutout has a thin dark edge.** The keyed edge pixels average RGB 58, 58, 36, and the inside 125, 66, 37. The line shows at 2x zoom. The OpenAI cutout has no such line. In the sample, the Gemini cutout kept the finer speckles of the photo, and the OpenAI one is rougher.
 - **Gemini at 1K is soft in the main image.** The cutout is 1024 px and the main image is 2000 px, so the product is enlarged about 2.2x. `CUTOUT_RES=2K` costs about $0.10 for the cutout. It was not tested with this prompt. The scenes at 1K are enlarged 1.56x for the listing images and 1.05x for the social squares, as the check lines show.
-- **The OpenAI cost is higher than imgen's estimate.** imgen prices an OpenAI call by its output only, and lists a 2048 px call at the same $0.006 as a 1024 px call. An edit also pays for its input image. One measured scene call (2048 px, `-q low`) used 1,587 input tokens (1,521 of them for the cutout) and 397 output tokens. imgen's price table lists $30 per million output tokens for this model, so the output alone is about $0.012, twice the estimate, and the input adds more. For the whole set, expect about $0.10 to $0.20, not $0.04. The Gemini prices are per image, from the published table. Look at your usage page.
+- **imgen holds more than a call costs.** OpenAI publishes no rule for the tokens of an input image on this model, so before an edit imgen holds room for 6,821 tokens per input image, the most that OpenAI's published input rule allows. A scene call then holds about $0.07. After the call, imgen books the tokens that OpenAI reports. One measured scene call (2048 px, `-q low`) used 1,587 input tokens (1,521 of them for the cutout) and 397 output tokens: about $0.024. For the whole set, expect about $0.10 to $0.20. `imgen history --cost` shows what each call cost.
 - **Tested with the mug only.** `PRODUCT` changes one word in the prompts. The scene texts talk about a kitchen counter and wooden tables, so edit `scene_prompt` in the script for other products.
 - **Square output.** The cutout and the scenes are square. A photo that is not square is drawn again as a square. This was not tested.

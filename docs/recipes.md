@@ -178,7 +178,7 @@ This saves `lighthouse-gemini.jpg`, `lighthouse-openai.png`, `lighthouse-codex.p
 
 - Drafts: `-p gemini -r 1K`, `-p openai -q low`, or `-p codex` (no API bill).
 - Finals: `-r 4K` or `-q high`, with a pinned `-m`.
-- Check the cost first with `--dry-run`. It prints the request and the estimate and makes no call.
+- Check the cost first with `--dry-run`. It prints the request and the call's top price, and makes no call.
 - Repeat a request for free with `--cache`.
 - Cap the day's spend with `IMGEN_BUDGET`. See [Configuration](configuration.md#daily-budget).
 

@@ -202,19 +202,20 @@ Set `IMGEN_BUDGET` to a USD amount to cap spend per local calendar day:
 
 ```sh
 export IMGEN_BUDGET=5
-imgen gen "..."          # refused once today's spend plus this call would pass $5
+imgen gen "..."          # refused when today's spend plus this call's top price would pass $5
 imgen gen --force "..."  # ignores the budget for this call
 imgen history --cost     # what you spent, per day and per provider
 ```
 
-- imgen reserves the estimated cost before it sends the call, under a file lock. Parallel `batch` jobs, `compare` and other imgen processes all see the same total.
+- Before it sends a call, imgen holds the call's top price, under a file lock: the image at its size and quality (the dearest when the API picks them), the prompt, each input image, and room for the text and thinking that the model writes. Parallel `batch` jobs, `compare` and other imgen processes all see the same total. See [Providers](providers.md#cost-notes) for the numbers.
+- After the call, the cost is the tokens that the official OpenAI or Gemini API reports, at the rates in the price table. imgen writes it to the history, then drops the hold. A call with no reported tokens, such as one to a custom endpoint, counts at the price that was held.
 - A call whose price is unknown is refused while a budget is set. Use `--force`, or add the price with `IMGEN_PRICES`.
-- A failed or timed-out call counts at its estimate, because the provider may have billed it.
+- A failed or timed-out call counts at the price that was held, because the provider may have billed it.
 - On a provider's official API, a try refused with a 429 costs nothing. So a call that a 429 made imgen send again counts once, for the try that ran, and a call whose last try still got a 429 counts nothing.
 - A `--cache` hit costs nothing.
 - With `IMGEN_HISTORY=off`, spend still counts. imgen writes a cost-only ledger, `budget.jsonl`, beside the history (no prompt, arguments, files or error text).
 - A value that is not a number is ignored, so no budget applies.
-- Spend is an estimate from the built-in price table. See [Providers](providers.md#cost-notes).
+- Prices come from the built-in price table. See [Providers](providers.md#cost-notes).
 
 The MCP server has its own per-session budget. See [MCP server](mcp.md#session-limits).
 

@@ -26,7 +26,7 @@ imgen gen -r 4K -a 16:9 "a lone lighthouse at dusk, no text"
 
 ## Why imgen
 
-- **Safe with your money.** imgen never sends a paid request twice if it may have run. It tries again only when the official API refuses a request with a rate limit (HTTP 429), and it shows each try. [`IMGEN_BUDGET`](docs/configuration.md#daily-budget) caps imgen's estimated daily spend, and imgen checks it before every paid call, also across parallel jobs. `--dry-run` shows the estimate first.
+- **Safe with your money.** imgen never sends a paid request twice if it may have run. It tries again only when the official API refuses a request with a rate limit (HTTP 429), and it shows each try. [`IMGEN_BUDGET`](docs/configuration.md#daily-budget) is a daily spending limit. Before each paid call, also across parallel jobs, imgen checks the call's top price against it: the image, its inputs and room for the model's text. After the call, it counts the tokens that the API reports. `--dry-run` shows the top price first.
 - **Safe with your keys and files.** Keys stay in a private file that imgen reads itself, so they never enter your shell or other programs. Files are never overwritten, every response is checked, and the MCP server works only inside one folder. See [Security](docs/security.md).
 - **Made for scripts and agents.** Paths on stdout, `--json` results, stable exit codes, pipes with `-i -` and `-o -`, a Claude Code skill, and `imgen mcp`.
 - **New models work on day one.** `imgen models` asks each API what exists now, `-m latest` picks the newest, and any model ID passes straight through.
@@ -54,7 +54,7 @@ cat photo.png | imgen edit -i - -o - "make it night" | imgen upscale --local -i 
 
 `imgen qr https://example.com "a calm koi pond"` turns a link into QR code art and checks that it still scans ([recipe](docs/recipes.md#qr-code-art)).
 
-Paths of saved files go to stdout. Model, time and estimated cost go to stderr (one line such as `✓ 1 image · gemini-3.1-flash-image · 8.8s · ~$0.067` on a terminal). `imgen gen -h` shows every flag, grouped, with examples. Short flags have long names too (`-a`/`--aspect`, `-p`/`--provider`, ...). More in [Getting started](docs/getting-started.md).
+Paths of saved files go to stdout. Model, time and cost go to stderr (one line such as `✓ 1 image · gemini-3.1-flash-image · 8.8s · ~$0.067` on a terminal). `imgen gen -h` shows every flag, grouped, with examples. Short flags have long names too (`-a`/`--aspect`, `-p`/`--provider`, ...). More in [Getting started](docs/getting-started.md).
 
 On a terminal, a bare `imgen` (or `imgen -i`) starts an [interactive session](docs/interactive.md). Type a prompt, then type what to change, and imgen edits the last image:
 

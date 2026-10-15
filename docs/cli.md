@@ -65,7 +65,7 @@ The prompt can be words, `-P file`, or `-` to read stdin. Flags may come before 
 | `--timeout d` | deadline for the whole call | Default `5m`. A provider `options.timeout` can raise it; see [Timeouts](#timeouts). |
 | `--force` | ignore `IMGEN_BUDGET` | |
 | `--cache` | reuse a cached result for an identical request | A hit costs nothing. |
-| `--dry-run` | print the request and cost estimate | No API call. `-m latest` stays unresolved. |
+| `--dry-run` | print the request and its top price | No API call. `-m latest` stays unresolved. |
 
 ### Output flags
 
@@ -342,7 +342,7 @@ imgen is built to be called from scripts and agents.
 - **Errors** are one line on stderr: `imgen: <what went wrong>. <what to do>`, for example `imgen: edit needs an input image. Add one with -i in.png (a path, URL or clip:)`.
 - **Files are never overwritten.** A name clash adds `-1`, `-2`, ... before the extension.
 - **The extension follows the real image type**, not the request. Gemini usually returns JPEG, so expect `.jpg`.
-- **Costs are estimates** from a built-in price table. `IMGEN_PRICES` overrides it.
+- **Costs come from a built-in price table.** `IMGEN_PRICES` overrides it. A call on the official OpenAI or Gemini API costs the tokens that the API reports, at the table's rates. A dry run, and a call with no reported tokens, shows the call's top price (see [Configuration](configuration.md#daily-budget)).
 
 ```sh
 f=$(imgen gen "a red cube on a white table" | head -1)
@@ -370,7 +370,7 @@ With no `--name`, the base name is a slug of the prompt: lowercase words joined 
 | `api_model` | The model the API reported, when it differs. |
 | `files[]` | One entry per saved image: `path`, `mime`, `width`, `height`, `bytes`, and `meta` (sidecar path, with `--meta`). |
 | `elapsed_ms` | Time of the provider call. |
-| `cost_usd`, `cost_known` | Estimated cost, and whether the price is known. A try that the official API refused with a 429 costs nothing. |
+| `cost_usd`, `cost_known` | Cost, and whether the price is known: the reported tokens at the table's rates, else (and always for a dry run) the call's top price. A try that the official API refused with a 429 costs nothing. |
 | `attempts` | How many times the paid request was sent, when a 429 on the provider's official API made imgen send it again (omitted otherwise). |
 | `dry_run` | `true` for `--dry-run`. A dry run also has a `request` object. |
 | `text` | Any text the model returned with the images. |

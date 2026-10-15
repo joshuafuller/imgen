@@ -124,7 +124,7 @@
 </svg>
     </div>
     <div class="cards">
-      <div class="card"><div class="card-header"><div class="card-dot amber"></div><h3>Money</h3></div><ul><li>&bull; The cache is checked first; a hit costs $0 and skips the budget</li><li>&bull; On a miss, the estimated cost is held against IMGEN_BUDGET</li><li>&bull; The hold is released only after the history entry is written</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot amber"></div><h3>Money</h3></div><ul><li>&bull; The cache is checked first; a hit costs $0 and skips the budget</li><li>&bull; On a miss, the call's top price is held against IMGEN_BUDGET</li><li>&bull; The hold is released only after the history entry, with the cost of the reported tokens, is written</li></ul></div>
       <div class="card"><div class="card-header"><div class="card-dot emerald"></div><h3>Bytes</h3></div><ul><li>&bull; imgcheck runs on provider and cached images</li><li>&bull; Post order: denoise, remove-bg, crop, resize</li><li>&bull; Metadata embed is on by default; --no-embed turns it off</li></ul></div>
       <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>Output</h3></div><ul><li>&bull; Files open with O_EXCL: never overwrite, never follow a planted symlink</li><li>&bull; Absolute paths go to stdout; model, timing and cost go to stderr</li></ul></div>
     </div>

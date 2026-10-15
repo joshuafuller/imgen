@@ -79,7 +79,7 @@ It ends with a summary such as `3 ready · 6 not set up · 0 problems` and the n
 imgen gen "a red cube on a white table"
 ```
 
-imgen prints the saved file's absolute path on stdout. On stderr it prints one summary line with the model, the time and an estimated cost:
+imgen prints the saved file's absolute path on stdout. On stderr it prints one summary line with the model, the time and the cost:
 
 ```text
 ✓ 1 image · gemini-3.1-flash-image · 9.8s · ~$0.067
@@ -104,7 +104,7 @@ Try a few options:
 imgen gen -r 4K -a 16:9 "a lone lighthouse at dusk, no text"          # 4K, wide
 imgen gen -p openai -r 1024x1024 -b transparent -f png "flat rocket icon, no text"
 imgen gen -n 4 --grid -o out/ --name logo "minimal coffee logo mark"   # four files plus a sheet
-imgen gen --dry-run -p openai -q high "..."                            # cost estimate, no API call
+imgen gen --dry-run -p openai -q high "..."                            # the top price, no API call
 ```
 
 ## 5. Edit an image

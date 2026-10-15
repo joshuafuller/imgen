@@ -141,7 +141,7 @@ imgen draws an exact level-H QR code, Gemini repaints it as the scene, and imgen
 
 - Drafts: `-p gemini -r 1K`, or `-p openai -q low`, or `-p codex` (no API cost).
 - Finals: `-r 4K` or `-q high`, with a pinned `-m`.
-- Use `--dry-run` to see the request and the cost estimate before a large or expensive call.
+- Use `--dry-run` to see the request and its top price before a large or expensive call.
 
 ## Animated game character
 

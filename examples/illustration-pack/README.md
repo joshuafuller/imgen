@@ -14,7 +14,7 @@ You need `imgen` with an OpenAI key (`imgen init`) and `uv`. Without `uv`, Pytho
    DRY_RUN=1 ./make_pack.sh out
    ```
 
-2. Make the pack. It is one draw and five edits. imgen estimates $0.006 a call (about $0.04 in all), but the five edits also pay for the anchor image as input, so the real cost is higher (see the notes: about $0.05 to $0.10). It takes about 25 seconds:
+2. Make the pack. It is one draw and five edits. Before each call imgen holds its top price: about $0.008 for the draw and $0.064 for each edit (about $0.33 for the pack). The real cost is lower: about $0.05 to $0.10 for the pack (see the notes). It takes about 25 seconds:
 
    ```text
    ./make_pack.sh out
@@ -94,8 +94,8 @@ The full-size images are not in this repository, only the two sheets (shrunk to 
 - **A new run is a new look.** The anchor is drawn again on every fresh run, so its colors change (one run had a coral tray, another a blue tray). Each pack is consistent inside itself. To keep a look, copy its anchor into a new folder first (`mkdir out2; cp out/empty-inbox.png out2/`). The script then draws only the other five.
 - **The anchor decides everything.** If it is poor, every image copies the fault. Run step 2, look at `empty-inbox.png`, and delete the folder if you do not like it.
 - **OpenAI only.** The script asks OpenAI for transparency, because Gemini cannot make an alpha channel. The checks fail on an image with no transparent pixels.
-- **Low quality is enough here.** The sample is `-q low`. `QUALITY=medium ./make_pack.sh out` is estimated by `imgen --dry-run` at about $0.053 an image, about $0.32 for the pack, before the input cost. That run was not made for this example.
-- **The cost is higher than imgen's estimate.** imgen prices an OpenAI call by its output only. An edit also pays for its input image. One measured edit of this pack (`-q low`, 1024 px, the anchor as input) used 1,060 input tokens and 196 output tokens. The output is about $0.006 at imgen's rate of $30 per million output tokens, which matches the estimate, and the input adds to it. The first image has no input image, so its estimate is close. For the pack, expect about $0.05 to $0.10 and not $0.04. Look at your usage page.
+- **Low quality is enough here.** The sample is `-q low`. For `QUALITY=medium ./make_pack.sh out`, `imgen --dry-run` holds about $0.055 for the draw and $0.11 for each edit, about $0.61 for the pack. That run was not made for this example.
+- **imgen holds more than a call costs.** OpenAI publishes no rule for the tokens of an input image on this model, so before an edit imgen holds room for 6,821 tokens per input image, the most that OpenAI's published input rule allows. After the call, imgen books the tokens that OpenAI reports. One measured edit of this pack (`-q low`, 1024 px, the anchor as input) used 1,060 input tokens and 196 output tokens: about $0.014. For the pack, expect about $0.05 to $0.10. `imgen history --cost` shows what each call cost.
 - **Your rules file is not read.** The script sets `IMGEN_RULES` to the `rules.json` in this folder. To use the two styles in your own setup, copy the `styles` block into `~/.config/imgen/rules.json` and remove the `export` line from the script.
 - **No words in the pictures.** The 404 sign is blank on purpose. Image models garble letters, so draw "404" and the other texts in your app.
 - **Dark pages.** The outlines are dark indigo and vanish on a dark background. Put the art on a light card, or use the `brand/` copies.

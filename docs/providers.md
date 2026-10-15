@@ -59,12 +59,12 @@ A model ID may use only letters, digits and `. _ : / @ + -`. It may be at most 2
 
 ## Cost notes
 
-Costs are estimates. imgen prints one with `--dry-run` and records it in the history. The table is embedded in the binary.
+imgen prices calls from a table that is embedded in the binary (`internal/pricing/prices.json`, with Google's and OpenAI's published prices of 2026-10-15). Before a call, `--dry-run` and the budget use the call's top price (see [Configuration](configuration.md#daily-budget)). After a call on the official OpenAI or Gemini API, the history records the tokens that the API reports, at the table's rates.
 
-- `gemini`: priced per image. The `gemini-3.1-flash-image` and `gemini-3-pro-image` families are priced by size. `gemini-3.1-flash-lite-image` and `gemini-2.5-flash-image` have one price each.
-- `openai`: priced by quality, and by size for 1024x1024, 1024x1536 and 1536x1024. Other sizes get the 1024x1024 price, and an edit does not count its input images. These prices are marked unverified in `internal/pricing/prices.json`.
+- `gemini`: priced per image by size (`gemini-3.1-flash-image`, `gemini-3-pro-image`) or at one price (`gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`). With no size, an edit counts the size that holds its largest input image, because Gemini then matches the output to the input. The top price also counts the prompt, 1120 tokens for each input image, and room for 2000 tokens of text and thinking (4000 for `gemini-3-pro-image`).
+- `openai`: priced in image output tokens. For `gpt-image-2` and `gpt-image-2.5` the tokens come from the formula of OpenAI's token calculator, for any size; for older models from OpenAI's token table of the three standard sizes; `gpt-image-1-mini` uses its per-image prices. When the API picks the size or the quality, the top price uses the dearest one (for `gpt-image-2`, high at 2880x2880). With `-a` and no `-r`, it uses the size that imgen sends for that aspect ratio. It also counts the prompt, and 6,821 tokens for each input image and the mask, the most that OpenAI's published input rule allows. Set `-q` and `-r` to keep it close to the real cost.
 - `codex`: shown as $0 (`~$0.000`). Codex uses your plan quota.
-- Every other provider, and any Gemini model not in the table: `cost: unknown`.
+- Every other provider, and any model not in the table: `cost: unknown`.
 
 To add or fix prices, point `IMGEN_PRICES` at a JSON file. Its entries are checked before the built-in ones.
 

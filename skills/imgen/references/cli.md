@@ -91,7 +91,7 @@ Each line is `{"prompt": "...", "name": "...", "p": "...", "m": "...", "r": "...
 ## Output contract
 
 - stdout: one absolute path per saved image, nothing else. Use it in scripts: `f=$(imgen gen "..." | head -1)`.
-- stderr (not a terminal, as when an agent runs imgen): `model: <resolved id>`, `time: <duration>`, `cost: ~$0.067` (or `cost: unknown`), and `api model: <id>` when the API reports a different ID. On a terminal, `gen`/`edit` print one line instead: `✓ 1 image · <model> · 8.8s · ~$0.067`. Errors are a single line `imgen: <what went wrong>. <what to do>`. Costs are estimates. Gemini prices are checked against Google's pricing page, and OpenAI per-image prices are estimates.
+- stderr (not a terminal, as when an agent runs imgen): `model: <resolved id>`, `time: <duration>`, `cost: ~$0.067` (or `cost: unknown`), and `api model: <id>` when the API reports a different ID. On a terminal, `gen`/`edit` print one line instead: `✓ 1 image · <model> · 8.8s · ~$0.067`. Errors are a single line `imgen: <what went wrong>. <what to do>`. Costs come from the price table: a dry run shows a call's top price, and after a call on the official OpenAI or Gemini API the cost is the tokens that the API reports.
 - The extension follows the returned MIME type. Gemini usually returns `.jpg`.
 - A name clash adds a suffix. It never overwrites.
 

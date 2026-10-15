@@ -123,7 +123,7 @@ EOF
 imgen batch --dry-run --json -p gemini jobs.jsonl | jq -s 'map(.cost_usd) | add'
 ```
 
-Output: a number, the estimated total in USD (about 0.2 for these three). Drop `--dry-run` to run them. To build the file from a plain list: `printf '%s\n' "a red kite" "a blue boat" | jq -Rc '{prompt: .}' > jobs.jsonl`.
+Output: a number, the top price of the three in USD (about 0.2). Drop `--dry-run` to run them. To build the file from a plain list: `printf '%s\n' "a red kite" "a blue boat" | jq -Rc '{prompt: .}' > jobs.jsonl`.
 
 ## 11. Pick a past image with fzf
 
