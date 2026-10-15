@@ -146,6 +146,12 @@ func setPreview(env Env, o *genOpts, stderr io.Writer) {
 	}
 }
 
+// streamOff reports IMGEN_STREAM=off: no streamed partial pictures, in any
+// command or session.
+func (e Env) streamOff() bool {
+	return strings.EqualFold(strings.TrimSpace(e.getenv("IMGEN_STREAM")), "off")
+}
+
 // setStream turns on the live partial pictures when the result will be
 // shown in the terminal, unless --no-stream. Only gen and edit call it:
 // batch jobs run side by side.

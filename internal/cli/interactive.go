@@ -66,6 +66,7 @@ func startSession(env Env, stderr io.Writer, con interactive.Terminal, st intera
 	if st.OutDir == "" {
 		st.OutDir = "."
 	}
+	st.NoStream = st.NoStream || env.streamOff()
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(sigs)

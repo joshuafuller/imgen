@@ -46,6 +46,7 @@ type outcome struct {
 	red        redactor
 	dispatched bool                 // the provider call was started, so it may have been billed
 	hold       *history.Reservation // budget hold, released after the history entry
+	plan       streamPlan           // how the call streams partial images; zero for none
 }
 
 // outputs lists the files to report: the grid sheet when there is one, else the images.

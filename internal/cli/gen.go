@@ -16,7 +16,6 @@ import (
 	"github.com/joshuafuller/imgen/internal/enhance"
 	"github.com/joshuafuller/imgen/internal/history"
 	"github.com/joshuafuller/imgen/internal/imgcheck"
-	"github.com/joshuafuller/imgen/internal/interactive"
 	"github.com/joshuafuller/imgen/internal/naming"
 	"github.com/joshuafuller/imgen/internal/post"
 	"github.com/joshuafuller/imgen/internal/pricing"
@@ -288,7 +287,7 @@ func execute(ctx context.Context, env Env, o *genOpts, pos []string, edit bool, 
 		oc.req.Prompt += " " + post.ChromaPrompt
 	}
 	if o.dryRun {
-		return oc.dryRun(), nil
+		return oc.dryRun(env, info), nil
 	}
 	err = oc.run(ctx, env, info)
 	rerr := oc.record(env, edit, pos, err)
@@ -354,7 +353,7 @@ func flagSet(fs *flag.FlagSet, name string) bool {
 	return set
 }
 
-func (oc *outcome) dryRun() *outcome {
+func (oc *outcome) dryRun(env Env, info io.Writer) *outcome {
 	oc.isDry = true
 	oc.req.Model = oc.o.model
 	if oc.req.Model == "" {
@@ -363,13 +362,19 @@ func (oc *outcome) dryRun() *outcome {
 	if oc.req.Model == "latest" {
 		oc.req.Model = unresolved
 	}
+	oc.plan = oc.dryPlan(env, info)
 	oc.estimate()
 	return oc
 }
 
+// estimate prices the call, plus the partial images it will stream.
 func (oc *outcome) estimate() {
 	n := max(oc.req.N, 1)
 	oc.cost, oc.costKnown = pricing.Estimate(oc.cfg.Type, oc.req.Model, oc.req.Size, oc.req.Quality, n)
+	if oc.plan.partials > 0 && oc.costKnown {
+		extra, _ := pricing.Partials(oc.cfg.Type, oc.req.Model, oc.plan.partials) // planStream checked it
+		oc.cost += extra
+	}
 }
 
 func (oc *outcome) run(ctx context.Context, env Env, info io.Writer) error {
@@ -412,6 +417,7 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 			return imgs, nil
 		}
 	}
+	oc.plan = oc.planStream(env, p, info)
 	oc.estimate()
 	if err := oc.reserveBudget(env); err != nil {
 		return nil, err
@@ -419,7 +425,7 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 	oc.dispatched = true
 	stop := progress.Start(info, "generating")
 	start := env.Now()
-	res, err := oc.generate(ctx, env, p, info, stop)
+	res, err := oc.generate(ctx, p, stop)
 	stop()
 	if err != nil {
 		return nil, err
@@ -439,32 +445,6 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 		_ = cache.Put(key, res.Images) // a failed cache write never fails the run
 	}
 	return res.Images, nil
-}
-
-// generate calls the provider, streamed when partial images have somewhere
-// to go: the session hook, or a live picture on the terminal that will show
-// the result. The spinner stops before the first frame, and the picture is
-// erased before anything else prints. Partials are never saved.
-func (oc *outcome) generate(ctx context.Context, env Env, p provider.Provider, info io.Writer, stop func()) (*provider.Result, error) {
-	s, ok := p.(provider.Streamer)
-	if !ok || oc.o.noStream {
-		return p.Generate(ctx, oc.req)
-	}
-	if env.Partial != nil {
-		return s.GenerateStream(ctx, oc.req, env.Partial)
-	}
-	var live interactive.Live
-	if oc.o.stream {
-		live = env.live(info)
-	}
-	if live == nil {
-		return p.Generate(ctx, oc.req)
-	}
-	defer live.Done()
-	return s.GenerateStream(ctx, oc.req, func(img provider.Image) {
-		stop()
-		_ = live.Draw(img.Data) // display only: a frame that fails is skipped
-	})
 }
 
 // reserveBudget holds the estimated cost against IMGEN_BUDGET before the paid

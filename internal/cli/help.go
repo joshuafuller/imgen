@@ -116,6 +116,7 @@ Behavior
   IMGEN_ALLOW_PRIVATE_URLS   1 allows -i URLs on private addresses
   IMGEN_QUIET                any value turns off the spinner
   IMGEN_PREVIEW              off, auto (default) or always: the result in the terminal
+  IMGEN_STREAM=off           no live partial pictures while an image renders
   GEMINI_BASE_URL            endpoint of the built-in gemini instance
   OPENAI_BASE_URL            endpoint of the built-in openai instance
   NO_COLOR                   plain output on a terminal
