@@ -22,6 +22,7 @@ imgen doctor                           checklist: ✓ ready, ○ not set up, ✗
 imgen completion bash|zsh|fish         shell completion script
 imgen mcp                              serve the same features as an MCP server on stdio
 imgen help env                         environment variables
+imgen interactive / imgen -i           terminal session for people; agents must NOT use it (needs a TTY, waits for keys)
 imgen version                          version, Go version, platform
 ```
 

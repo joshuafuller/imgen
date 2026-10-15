@@ -12,6 +12,7 @@ This page lists every imgen command and flag, the output contract that scripts a
 | `imgen compare -p a,b[,c] [flags] "prompt"` | Run one prompt on several providers and write a labelled sheet. |
 | `imgen upscale [-p replicate\|fal] [--scale 2\|4] [--local] in.png` | Make an image larger. |
 | `imgen rerun <id\|last> [flags]` | Run an earlier command again. |
+| `imgen interactive [flags]` | Start a terminal session: prompt, refine, pick. `imgen -i` does the same. A bare `imgen` on a terminal also starts it. See [Interactive mode](interactive.md). |
 | `imgen history [-n 20] [--json] [--cost [--since 7d]]` | List past runs, or show spend. |
 | `imgen styles [--names]` | List the named styles. |
 | `imgen profiles [--names]` | List the named flag profiles. |
@@ -178,6 +179,16 @@ Inside tmux or screen there are no inline pictures (use `--preview` for half blo
 `--preview` shows every image, and falls back to Unicode half blocks (`▀`) on a terminal with no graphics: 24-bit color when `COLORTERM` is `truecolor` or `24bit`, else 256 colors. `--no-preview` turns pictures off. `IMGEN_PREVIEW` sets the default: `off`, `auto` (the default) or `always` (the same as `--preview`). The flags win over the variable.
 
 Nothing is shown with `--json`, `--quiet` or `-o -`, when stderr is not a terminal, or in the MCP server. An SVG, or an image over the pixel limits, is not shown.
+
+## interactive
+
+```sh
+imgen interactive [-p NAME] [-m ID] [-a R] [-r R] [-n N] [--style NAME] [--profile NAME] [-o DIR]
+imgen -i [flags]
+imgen
+```
+
+Starts a terminal session. Each prompt generates an image. Each next prompt edits that image (`new:` starts a new one). Slash commands such as `/provider`, `/n`, `/undo` and `/save` change the settings or the current image. The flags set the first values of the settings. `-n` is from 1 to 9. Each call goes through `gen` or `edit`, so the budget, cache, history, redaction and output rules apply. A bare `imgen` starts the session only when stdin and stderr are both terminals. In other cases it prints the help and exits with 2. `imgen interactive` and `imgen -i` without a terminal exit with 2. Interactive mode is not for scripts, agents or MCP. Full guide: [Interactive mode](interactive.md).
 
 ## rerun
 

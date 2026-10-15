@@ -7,6 +7,7 @@ imgen is one command-line tool for many image models: Gemini, OpenAI, Codex, Ide
 | Page | What it covers |
 |---|---|
 | [Getting started](getting-started.md) | Install, add a key, run `imgen doctor`, make and edit your first image. |
+| [Interactive mode](interactive.md) | `imgen -i`: a terminal session where you type a prompt, refine the image, and pick from variants. |
 | [CLI reference](cli.md) | Every command and flag, the output contract, `--json` shape, exit codes and environment variables. |
 | [Providers](providers.md) | Each backend: keys, models, sizes, edit, mask and transparency support, quirks and costs. |
 | [Configuration](configuration.md) | Key file, rules file, styles, profiles, budget, history and cache. |
