@@ -8,6 +8,39 @@ Every entry links to the commit that made the change.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+Terminal-native imgen: pipes, pictures right in the terminal, an interactive mode, live
+painting on OpenAI, and `imgen qr` for QR code art that still scans.
+
+**Full changelog:** [v0.4.0...v0.5.0](https://github.com/joshuafuller/imgen/compare/v0.4.0...v0.5.0)
+
+### Added
+
+- **CLI:** `-i -` reads an image from stdin and `-o -` writes one to stdout, so commands chain with each other and with tools like ImageMagick. ([`7f38d7f`](https://github.com/joshuafuller/imgen/commit/7f38d7fe0b69d3891fc208a97d54e41b2d334efd))
+- **CLI:** Results show inline on kitty, iTerm2, WezTerm, Windows Terminal and other sixel terminals; `--preview` falls back to colored blocks, and `--no-preview` or `IMGEN_PREVIEW=off` turns it off. ([`f626817`](https://github.com/joshuafuller/imgen/commit/f62681755063725aeb4c0bc1f51cc66e55bac037)) ([`daca228`](https://github.com/joshuafuller/imgen/commit/daca228b7d19b9416539cac6ca587bb63d1092c2)) ([`309a5cf`](https://github.com/joshuafuller/imgen/commit/309a5cf1fd188443b4439fb8e98a8c6d320166f1))
+- **CLI:** `imgen` on a terminal opens an interactive session: type a prompt, refine the last image, pick between variants, `/undo` and `/save`. ([`3fd9ef3`](https://github.com/joshuafuller/imgen/commit/3fd9ef3df1790d1c95608f22b677617a79f86ce4)) ([`394f1f8`](https://github.com/joshuafuller/imgen/commit/394f1f85731d97ad291656be6a5af708363ddf64)) ([`df6b071`](https://github.com/joshuafuller/imgen/commit/df6b07195bbc99b97b350c455ffe6d188080223d))
+- **CLI:** On OpenAI, `gen` and `edit` paint the picture live while it renders; `--no-stream` or `IMGEN_STREAM=off` turns it off. ([`28325e9`](https://github.com/joshuafuller/imgen/commit/28325e96b9e113a4d3145a43333956dfe638a82f)) ([`7cd053d`](https://github.com/joshuafuller/imgen/commit/7cd053d74fc736c2b93e37da1646c1f24d9095ab)) ([`43e9eab`](https://github.com/joshuafuller/imgen/commit/43e9eab1d0c2c809472128e898cdace7beb12e5e))
+- **CLI:** `imgen qr TEXT "scene"` turns a QR code into art with Gemini and checks every module, so the result still scans. ([`653fff6`](https://github.com/joshuafuller/imgen/commit/653fff6413a5f78d760ccaeb69a53ec02049ff9c)) ([`4ae72fa`](https://github.com/joshuafuller/imgen/commit/4ae72faa523ecf525854fdd81f25fd92c18becb6)) ([`773447a`](https://github.com/joshuafuller/imgen/commit/773447a11fbfbf0c3859be85ff70e7311be4cd82)) ([`bcf22fe`](https://github.com/joshuafuller/imgen/commit/bcf22fe27d0f2212b43316a6e9a7600debb4ca9c))
+- **CLI:** `imgen qr --dry-run` shows the cost of one try and of all `-n` tries. ([`fdbe0a3`](https://github.com/joshuafuller/imgen/commit/fdbe0a364b2c7970852daae751ac93b33eaa79fd))
+- **Docs:** An interop cookbook with ImageMagick, ffmpeg, jq, xargs and fzf recipes. ([`4b1e79a`](https://github.com/joshuafuller/imgen/commit/4b1e79abfe6fcb6966111a98da4aba9fe1ca3e18)) ([`0bd0d7b`](https://github.com/joshuafuller/imgen/commit/0bd0d7bcc44e654fa2f39d5bb15237c5f94b5931))
+- **Docs:** Guides for pipes, terminal pictures, interactive mode, live painting and QR art. ([`685a365`](https://github.com/joshuafuller/imgen/commit/685a3652bbae9b128de31cfeffef48e6e82cdaf1)) ([`0df6d8b`](https://github.com/joshuafuller/imgen/commit/0df6d8bf38624fc70382034f218826fe5169a95b)) ([`902de00`](https://github.com/joshuafuller/imgen/commit/902de002bdf53ecc637915418cb453d829602f59)) ([`f1043ae`](https://github.com/joshuafuller/imgen/commit/f1043ae5e56fb6c5a6ee1df243ee802c9a6a6429))
+
+### Changed
+
+- **CLI:** A note on stderr when a provider ignores `-f` (Gemini returns JPEG for `-f png`). ([`fb0ee02`](https://github.com/joshuafuller/imgen/commit/fb0ee02f1d8fbc506cd2b2dadd092d276a2d29ce))
+- **Build:** The release no longer publishes to a Homebrew tap that does not exist, and the notes on the release page are checked. ([`fb0ee02`](https://github.com/joshuafuller/imgen/commit/fb0ee02f1d8fbc506cd2b2dadd092d276a2d29ce))
+
+### Fixed
+
+- **Build:** The docs smoke test now covers piped examples and `imgen qr`. ([`d599117`](https://github.com/joshuafuller/imgen/commit/d599117a05bf45c92458be999f2f3db53bbdbe5d)) ([`5935689`](https://github.com/joshuafuller/imgen/commit/5935689bf6ac3f0295849143c643a3f51b9be960)) ([`fb0ee02`](https://github.com/joshuafuller/imgen/commit/fb0ee02f1d8fbc506cd2b2dadd092d276a2d29ce))
+
+### Security
+
+- **MCP:** The server refuses `-` for images, mask and output directory, so a tool call can never read stdin or write stdout, which carry the protocol. ([`04bf559`](https://github.com/joshuafuller/imgen/commit/04bf5593c57af3c2ef18fcf78821d05c4b8b8d4d))
+- **CLI:** Streamed partial images are priced before the budget hold, so spend is never undercounted. ([`36c20da`](https://github.com/joshuafuller/imgen/commit/36c20daf53e91653e4f8213ec37d957c2994f492)) ([`5cc9c17`](https://github.com/joshuafuller/imgen/commit/5cc9c1745c22d16fd3d744c1a8e44eda6f9d3ed9))
+- **Providers:** Every streamed partial is size-checked before it is decoded, and a refusal to stream is remembered instead of retried. ([`47b2ffb`](https://github.com/joshuafuller/imgen/commit/47b2ffbcff368662e49607c96fb9e102b48f952a)) ([`5cc9c17`](https://github.com/joshuafuller/imgen/commit/5cc9c1745c22d16fd3d744c1a8e44eda6f9d3ed9))
+
 ## [0.4.0] - 2026-10-15
 
 First public release. One CLI for Gemini, OpenAI, Codex, Ideogram, Recraft, FLUX, Replicate,
@@ -42,5 +75,6 @@ server for AI agents. Every documented example is run against the real APIs befo
 - **MCP:** Only API providers by default, with caps on images, calls, spend, disk, request size and time; provider text is returned as untrusted data. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 - **Docs:** `SECURITY.md` and `docs/security.md` describe the threat model; ten independent review reports are in `docs/security/reviews/`. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 
-[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/joshuafuller/imgen/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/joshuafuller/imgen/releases/tag/v0.4.0
