@@ -8,6 +8,8 @@ Worked, end-to-end examples. Each folder has a README with the exact steps, a sc
 | [Brand kit](brand-kit/) | Logo explorations, then color, mono, inverted and small-size variants, a palette and a favicon |
 | [Social cards](social-cards/) | 1200x630 cards from Markdown posts, with crisp real-text titles; a title edit rebuilds for $0 |
 | [Thumbnails](thumbnails/) | 1280x720 video thumbnails with bold real-text titles, from a list |
+| [Product studio](product-studio/) | One product photo to a cutout, five restaged scenes and marketplace-size listing images, with a pure-white main image |
+| [Illustration pack](illustration-pack/) | Six app illustrations (empty states, 404, offline, success, welcome) in one consistent style |
 | [Wallpapers](wallpapers/) | One scene composed separately for phone, tablet, desktop and ultrawide |
 | [VTT tokens](vtt-tokens/) | Character portraits as round, transparent tabletop tokens with name plates |
 | [QR posters](qr-posters/) | Event posters with a scannable art QR code, at A4 and US Letter, as PNG and PDF |
