@@ -337,7 +337,7 @@ Provider names are read at run time from `imgen providers --names`, so new insta
 imgen is built to be called from scripts and agents.
 
 - **stdout** gets one absolute path per saved file, one per line, and nothing else. With `-o -` it gets only the image bytes (see [Pipes](#pipes)). With `--grid` the sheet path comes last. `compare` prefixes each path with the provider name (see [compare](#compare)).
-- **stderr** gets info lines: `model: <id>`, `time: <duration>`, `api model: <id>` (only when the API reports a different ID), `cost: ~$0.067` or `cost: unknown`, and `cache: hit` on a cache hit. When a 429 made imgen send the paid request again, the cost line ends with the attempts, such as `cost: ~$0.201 (3 attempts)`. `--quiet` hides them. These lines do not change, so scripts can parse them.
+- **stderr** gets info lines: `model: <id>`, `time: <duration>`, `api model: <id>` (only when the API reports a different ID), `cost: ~$0.067` or `cost: unknown`, and `cache: hit` on a cache hit. When a 429 made imgen send the paid request again, the cost line ends with the attempts, such as `cost: ~$0.067 (3 attempts)`. Only the try that ran is counted: a try that the official API refused with a 429 costs nothing. `--quiet` hides them. These lines do not change, so scripts can parse them.
 - **On a terminal**, `gen` and `edit` print one summary line on stderr instead, such as `✓ 1 image · gemini-3.1-flash-image · 8.8s · ~$0.067`. imgen uses terminal colors only when stderr (or, for `doctor`, stdout) is a terminal, `NO_COLOR` is not set and `TERM` is not `dumb`. Pipes, files and the MCP server always get plain text, and stdout never gets escape codes when it is not a terminal.
 - **Errors** are one line on stderr: `imgen: <what went wrong>. <what to do>`, for example `imgen: edit needs an input image. Add one with -i in.png (a path, URL or clip:)`.
 - **Files are never overwritten.** A name clash adds `-1`, `-2`, ... before the extension.
@@ -370,7 +370,7 @@ With no `--name`, the base name is a slug of the prompt: lowercase words joined 
 | `api_model` | The model the API reported, when it differs. |
 | `files[]` | One entry per saved image: `path`, `mime`, `width`, `height`, `bytes`, and `meta` (sidecar path, with `--meta`). |
 | `elapsed_ms` | Time of the provider call. |
-| `cost_usd`, `cost_known` | Estimated cost, and whether the price is known. The cost counts every attempt. |
+| `cost_usd`, `cost_known` | Estimated cost, and whether the price is known. A try that the official API refused with a 429 costs nothing. |
 | `attempts` | How many times the paid request was sent, when a 429 on the provider's official API made imgen send it again (omitted otherwise). |
 | `dry_run` | `true` for `--dry-run`. A dry run also has a `request` object. |
 | `text` | Any text the model returned with the images. |
@@ -407,7 +407,7 @@ On an error, stdout gets `{"ok":false,"error":"...","exit":1}` (plus `line` in `
 | `GEMINI_BASE_URL`, `OPENAI_BASE_URL` | Endpoint override for the built-in `gemini` and `openai` instances, when the rules file sets no `base_url`. With `OPENAI_BASE_URL` set, the built-in `openai` instance sends `OPENAI_API_KEY` there if it is set; see [Providers](providers.md#openai). |
 | `IMGEN_ENV_FILE` | Key file. Default `~/.config/imgen/env`. Must not be readable by group or others. |
 | `IMGEN_RULES` | Rules file. Default `~/.config/imgen/rules.json`. |
-| `IMGEN_RETRIES` | Attempts for downloads, status polls and model lists after HTTP 429, 5xx and network errors. Default `3`, with backoff; one `Retry-After` wait is at most 60 s. A paid request is retried after a 429 only on the provider's official API, up to `IMGEN_RETRIES` attempts in all, and each attempt counts in the cost and the budget; a paid request to a custom endpoint is never sent twice. After a 429 that is not retried, or that the last attempt still gets, the error says when to run it again. |
+| `IMGEN_RETRIES` | Attempts for downloads, status polls and model lists after HTTP 429, 5xx and network errors. Default `3`, with backoff; one `Retry-After` wait is at most 60 s. A paid request is retried after a 429 only on the provider's official API, up to `IMGEN_RETRIES` attempts in all; a try that the official API refused with a 429 costs nothing, so only the try that ran counts in the cost and the budget; a paid request to a custom endpoint is never sent twice. After a 429 that is not retried, or that the last attempt still gets, the error says when to run it again. |
 | `IMGEN_PRICES` | JSON file that overrides the built-in price table. |
 | `IMGEN_BUDGET` | Spending limit in USD per local day. See [Configuration](configuration.md#daily-budget). |
 | `IMGEN_HISTORY` | `off` stops recording the history. |

@@ -210,7 +210,7 @@ imgen history --cost     # what you spent, per day and per provider
 - imgen reserves the estimated cost before it sends the call, under a file lock. Parallel `batch` jobs, `compare` and other imgen processes all see the same total.
 - A call whose price is unknown is refused while a budget is set. Use `--force`, or add the price with `IMGEN_PRICES`.
 - A failed or timed-out call counts at its estimate, because the provider may have billed it.
-- A call that a 429 made imgen send again counts each attempt at the estimate. The hold before the call is one estimate.
+- On a provider's official API, a try refused with a 429 costs nothing. So a call that a 429 made imgen send again counts once, for the try that ran, and a call whose last try still got a 429 counts nothing.
 - A `--cache` hit costs nothing.
 - With `IMGEN_HISTORY=off`, spend still counts. imgen writes a cost-only ledger, `budget.jsonl`, beside the history (no prompt, arguments, files or error text).
 - A value that is not a number is ignored, so no budget applies.
@@ -243,7 +243,7 @@ PNG and JPEG outputs carry the imgen version, provider instance and model in the
 
 | Variable | Use |
 |---|---|
-| `IMGEN_RETRIES` | Attempts for downloads, status polls and model lists after HTTP 429, 5xx and network errors. Default `3`. A paid request is retried after a 429 only on the provider's official API, up to `IMGEN_RETRIES` attempts in all, and each attempt counts in the cost and the budget; a paid request to a custom endpoint is never sent twice. |
+| `IMGEN_RETRIES` | Attempts for downloads, status polls and model lists after HTTP 429, 5xx and network errors. Default `3`. A paid request is retried after a 429 only on the provider's official API, up to `IMGEN_RETRIES` attempts in all; a try that the official API refused with a 429 costs nothing, so only the try that ran counts in the cost and the budget; a paid request to a custom endpoint is never sent twice. |
 | `IMGEN_PRICES` | Path to a JSON price table that overrides the built-in one. |
 | `IMGEN_MAX_PIXELS` | Largest accepted image, width times height. Default `40000000`. |
 | `GEMINI_BASE_URL`, `OPENAI_BASE_URL` | Endpoints for the built-in `gemini` and `openai` instances when the rules file sets no `base_url`. With `OPENAI_BASE_URL` set, the built-in `openai` instance sends `OPENAI_API_KEY` there if it is set. Instances with their own `base_url` use only their `api_key_env` ([Providers](providers.md#openai)). |
