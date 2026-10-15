@@ -43,7 +43,13 @@ func newFake(goos string, have ...string) *fakeEnv {
 func (f *fakeEnv) install(t *testing.T) {
 	t.Helper()
 	oRun, oLook, oEnv, oGOOS, oWSL, oTTY := run, lookPath, getenv, goos, isWSL, isTTY
-	t.Cleanup(func() { run, lookPath, getenv, goos, isWSL, isTTY = oRun, oLook, oEnv, oGOOS, oWSL, oTTY })
+	oSize, oDA1 := winsize, da1Sixel
+	t.Cleanup(func() {
+		run, lookPath, getenv, goos, isWSL, isTTY = oRun, oLook, oEnv, oGOOS, oWSL, oTTY
+		winsize, da1Sixel = oSize, oDA1
+	})
+	winsize = func(io.Writer) (int, int, int, int) { return 80, 24, 0, 0 }
+	da1Sixel = func() bool { return false } // never query a real terminal
 	run = func(name string, stdin io.Reader, env []string, args ...string) ([]byte, error) {
 		c := call{name: name, args: args, env: env}
 		if stdin != nil {

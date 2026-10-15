@@ -1,4 +1,5 @@
-// Package preview shows, copies and pastes images through the host desktop.
+// Package preview shows, copies and pastes images through the host desktop,
+// and draws them in the terminal.
 package preview
 
 import (
@@ -215,22 +216,26 @@ func PasteImage() ([]byte, string, error) {
 
 const kittyChunk = 4096
 
-// Inline draws the image in the terminal using the kitty or iTerm2 protocol.
-// It returns false (and no error) when w is not a TTY or the terminal is unsupported.
+// Inline draws the image in the terminal using the kitty, iTerm2 or sixel
+// protocol. It returns false (and no error) when w is not a TTY or the
+// terminal has none of them.
 func Inline(w io.Writer, path string) (bool, error) {
 	if !isTTY(w) {
 		return false, nil
 	}
-	kitty := getenv("TERM") == "xterm-kitty" || getenv("KITTY_WINDOW_ID") != ""
-	iterm := getenv("TERM_PROGRAM") == "iTerm.app" || getenv("TERM_PROGRAM") == "WezTerm"
-	if !kitty && !iterm {
+	proto := detect()
+	switch proto {
+	case protoNone:
 		return false, nil
+	case protoSixel:
+		err := showSixel(w, path)
+		return err == nil, err
 	}
 	data, err := readFile(path)
 	if err != nil {
 		return false, err
 	}
-	if kitty {
+	if proto == protoKitty {
 		if data, err = toPNG(data); err != nil {
 			return false, err
 		}
