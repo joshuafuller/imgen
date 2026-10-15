@@ -9,6 +9,7 @@ import (
 	_ "image/png"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,6 +34,11 @@ func TestRemoveBGOverLimitResizesFirstOrRefuses(t *testing.T) {
 	post.MaxKeyPixels = 100
 	t.Cleanup(func() { post.MaxKeyPixels = old })
 	big := greenPNG(t, 20, 20) // 400 px, over the lowered key limit
+	parsePost := func(resize, crop string, removeBG bool, denoise string) (postSpec, error) {
+		ps, err := parsePost(resize, crop, removeBG, denoise)
+		ps.screen = post.Green
+		return ps, err
+	}
 
 	ps, _ := parsePost("", "", true, "")
 	if _, err := ps.apply(big); err == nil {
@@ -197,18 +203,111 @@ func TestPostFlagErrors(t *testing.T) {
 	}
 }
 
+// --remove-bg asks for magenta by default and green on request, and keys
+// that color out to a PNG.
 func TestRemoveBG(t *testing.T) {
-	green := color.NRGBA{R: 0, G: 255, B: 0, A: 255}
-	h, pf := pngHarness(t, 16, 16, green)
+	for _, tc := range []struct {
+		flag, hex string
+		bg        color.NRGBA
+	}{
+		{"--remove-bg", "#FF00FF", color.NRGBA{R: 255, B: 255, A: 255}},
+		{"--remove-bg=magenta", "#FF00FF", color.NRGBA{R: 255, B: 255, A: 255}},
+		{"--remove-bg=green", "#00FF00", color.NRGBA{G: 255, A: 255}},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			h, pf := pngHarness(t, 16, 16, tc.bg)
+			dir := t.TempDir()
+			if c := h.run("gen", "--json", "-o", dir, "--name", "a", "-f", "jpeg", tc.flag, "cat"); c != 0 {
+				t.Fatalf("code %d: %s", c, h.errb.String())
+			}
+			if got := pf.got[0].Prompt; !strings.HasPrefix(got, "cat ") || !strings.Contains(got, tc.hex) {
+				t.Errorf("prompt %q, want the %s screen", got, tc.hex)
+			}
+			f := decodeJSON(t, h.out.String())["files"].([]any)[0].(map[string]any)
+			if f["mime"] != "image/png" || !strings.HasSuffix(f["path"].(string), ".png") {
+				t.Errorf("file %v", f)
+			}
+		})
+	}
+	h := newHarness(t)
+	if c := h.run("gen", "--remove-bg=blue", "cat"); c != 2 {
+		t.Errorf("--remove-bg=blue: code %d", c)
+	}
+}
+
+// With --remove-bg, a cutout given as -i reaches the model on the screen
+// color; without it, the input is sent as it is.
+func TestRemoveBGFlattensInputs(t *testing.T) {
+	im := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	im.SetNRGBA(0, 0, color.NRGBA{10, 20, 30, 255})
+	var b bytes.Buffer
+	if err := png.Encode(&b, im); err != nil {
+		t.Fatal(err)
+	}
+	in := filepath.Join(t.TempDir(), "cutout.png")
+	if err := os.WriteFile(in, b.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		flags []string
+		want  color.NRGBA // the clear pixel as the model gets it
+	}{
+		{[]string{"--remove-bg"}, color.NRGBA{255, 0, 255, 255}},
+		{[]string{"--remove-bg=green"}, color.NRGBA{0, 255, 0, 255}},
+		{nil, color.NRGBA{}},
+	} {
+		h, pf := pngHarness(t, 8, 8, tc.want)
+		args := append(append([]string{"edit", "-i", in, "-o", t.TempDir()}, tc.flags...), "cat")
+		mustRun(t, h, args...)
+		got, err := png.Decode(bytes.NewReader(pf.got[0].Inputs[0].Data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := color.NRGBAModel.Convert(got.At(1, 0)).(color.NRGBA); c != tc.want {
+			t.Errorf("%v: clear pixel sent as %v, want %v", tc.flags, c, tc.want)
+		}
+	}
+}
+
+// --pixel makes a PNG of that height; --resize after it keeps the pixels
+// sharp; the dry run names the settings.
+func TestPixelFlag(t *testing.T) {
+	h, _ := pngHarness(t, 32, 32, color.NRGBA{R: 200, G: 60, B: 40, A: 255})
 	dir := t.TempDir()
-	if c := h.run("gen", "--json", "-o", dir, "--name", "a", "-f", "jpeg", "--remove-bg", "cat"); c != 0 {
-		t.Fatalf("code %d: %s", c, h.errb.String())
-	}
-	if got := pf.got[0].Prompt; !strings.HasPrefix(got, "cat ") || !strings.Contains(got, "green") {
-		t.Errorf("prompt %q", got)
-	}
+	mustRun(t, h, "gen", "--json", "-o", dir, "--name", "p", "-f", "jpeg", "--pixel", "8", "--resize", "40x40:stretch", "cat")
 	f := decodeJSON(t, h.out.String())["files"].([]any)[0].(map[string]any)
-	if f["mime"] != "image/png" || !strings.HasSuffix(f["path"].(string), ".png") {
-		t.Errorf("file %v", f)
+	if f["mime"] != "image/png" || f["width"] != float64(40) || f["height"] != float64(40) {
+		t.Fatalf("file %v, want a 40x40 PNG", f)
+	}
+	mustRun(t, h, "gen", "--dry-run", "--pixel", "64", "--colors", "16", "--remove-bg", "cat")
+	if out := h.out.String(); !strings.Contains(out, "pixel: 64 pixels tall, 16 colors") || !strings.Contains(out, "remove-bg: magenta") {
+		t.Errorf("dry run: %s", out)
+	}
+	pal := filepath.Join(t.TempDir(), "pal.png")
+	im := image.NewNRGBA(image.Rect(0, 0, 3, 1))
+	for i, c := range []color.NRGBA{{10, 10, 10, 255}, {200, 50, 50, 255}, {240, 230, 200, 255}} {
+		im.SetNRGBA(i, 0, c)
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, im); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pal, b.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mustRun(t, h, "gen", "--dry-run", "--pixel", "64", "--palette", pal, "cat")
+	if out := h.out.String(); !strings.Contains(out, "pixel: 64 pixels tall, the colors of "+pal) {
+		t.Errorf("dry run with a palette: %s", out)
+	}
+	for _, args := range [][]string{
+		{"--colors", "8"},
+		{"--palette", pal},
+		{"--pixel", "2000"},
+		{"--pixel", "64", "--colors", "1"},
+		{"--pixel", "64", "--palette", filepath.Join(t.TempDir(), "missing.png")},
+	} {
+		if c := h.run(append(append([]string{"gen", "--dry-run"}, args...), "cat")...); c != 2 {
+			t.Errorf("%v: code %d, want a usage error", args, c)
+		}
 	}
 }

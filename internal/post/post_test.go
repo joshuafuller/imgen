@@ -146,7 +146,7 @@ func keyed(t *testing.T) image.Image {
 			}
 		}
 	}
-	out, err := ChromaKey(encJPEG(t, im))
+	out, err := ChromaKey(encJPEG(t, im), Green)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,14 +180,78 @@ func TestChromaKeyDespill(t *testing.T) {
 }
 
 func TestChromaKeyNoKeyColor(t *testing.T) {
-	if _, err := ChromaKey(encPNG(t, solid(20, 20, color.NRGBA{200, 0, 0, 255}))); err == nil {
-		t.Error("expected error when corners are not green")
+	for _, s := range []Screen{Green, Magenta} {
+		_, err := ChromaKey(encPNG(t, solid(20, 20, color.NRGBA{200, 0, 0, 255})), s)
+		if err == nil || !bytes.Contains([]byte(err.Error()), []byte("not "+s.Name+"; background is not a flat "+s.Hex)) {
+			t.Errorf("%s: want the corners error, got %v", s.Name, err)
+		}
 	}
 }
 
-func TestChromaPrompt(t *testing.T) {
-	if ChromaPrompt == "" {
-		t.Error("empty")
+// On magenta, a green subject keeps every pixel (a green screen would key
+// out the cloak), and the magenta tint on its edge goes.
+func TestChromaKeyMagenta(t *testing.T) {
+	im := solid(60, 60, color.NRGBA{255, 0, 255, 255})
+	for y := 20; y < 40; y++ {
+		for x := 20; x < 40; x++ {
+			im.Set(x, y, color.NRGBA{40, 200, 40, 255}) // a bright green cloak
+		}
+	}
+	for y := 18; y < 42; y++ {
+		for x := 18; x < 42; x++ {
+			if x < 20 || x >= 40 || y < 20 || y >= 40 {
+				im.Set(x, y, color.NRGBA{170, 60, 170, 255}) // dark outline with magenta spill
+			}
+		}
+	}
+	out, err := ChromaKey(encJPEG(t, im), Magenta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := png.Decode(bytes.NewReader(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := d.(*image.NRGBA)
+	if a := n.NRGBAAt(2, 2).A; a != 0 {
+		t.Errorf("background alpha %d", a)
+	}
+	if c := n.NRGBAAt(30, 30); c.A != 255 || c.G < 150 {
+		t.Errorf("green subject lost or tinted: %+v", c)
+	}
+	if c := n.NRGBAAt(19, 30); c.A != 0 && min(c.R, c.B) > c.G+20 {
+		t.Errorf("magenta tint not removed from the edge: %+v", c)
+	}
+}
+
+// Despill on magenta leaves a pure red and a pure blue as they are.
+func TestDespillMagentaKeepsRedAndBlue(t *testing.T) {
+	im := image.NewNRGBA(image.Rect(0, 0, 3, 1))
+	im.SetNRGBA(0, 0, color.NRGBA{220, 30, 20, 255})
+	im.SetNRGBA(1, 0, color.NRGBA{0, 0, 0, 0})
+	im.SetNRGBA(2, 0, color.NRGBA{20, 30, 220, 255})
+	despill(im, Magenta)
+	if c := im.NRGBAAt(0, 0); c != (color.NRGBA{220, 30, 20, 255}) {
+		t.Errorf("red changed: %+v", c)
+	}
+	if c := im.NRGBAAt(2, 0); c != (color.NRGBA{20, 30, 220, 255}) {
+		t.Errorf("blue changed: %+v", c)
+	}
+}
+
+func TestScreens(t *testing.T) {
+	for in, want := range map[string]Screen{"": Magenta, "magenta": Magenta, "true": Magenta, "green": Green} {
+		if s, err := ParseScreen(in); err != nil || s != want {
+			t.Errorf("%q: %v %v", in, s, err)
+		}
+	}
+	if _, err := ParseScreen("blue"); err == nil {
+		t.Error("blue accepted")
+	}
+	for _, s := range []Screen{Magenta, Green} {
+		if p := s.Prompt(); !bytes.Contains([]byte(p), []byte(s.Hex)) || !bytes.Contains([]byte(p), []byte("no "+s.Name+" on the subject")) {
+			t.Errorf("%s prompt: %q", s.Name, p)
+		}
 	}
 }
 
@@ -216,7 +280,7 @@ func TestBombsRejected(t *testing.T) {
 	if _, _, err := Crop(bomb, 0, 0, 1, 1); !errors.Is(err, imgcheck.ErrTooBig) {
 		t.Errorf("Crop: %v", err)
 	}
-	if _, err := ChromaKey(bomb); !errors.Is(err, imgcheck.ErrTooBig) {
+	if _, err := ChromaKey(bomb, Magenta); !errors.Is(err, imgcheck.ErrTooBig) {
 		t.Errorf("ChromaKey: %v", err)
 	}
 }
@@ -230,7 +294,7 @@ func TestResizeTargetTooBig(t *testing.T) {
 func TestPostRefusesOverMaxPixels(t *testing.T) {
 	t.Setenv("IMGEN_MAX_PIXELS", "10")
 	data := encPNG(t, solid(4, 4, color.White))
-	if _, err := ChromaKey(data); !errors.Is(err, imgcheck.ErrTooBig) {
+	if _, err := ChromaKey(data, Magenta); !errors.Is(err, imgcheck.ErrTooBig) {
 		t.Errorf("ChromaKey: %v", err)
 	}
 	if _, _, err := Resize(data, 2, 2, "fit"); !errors.Is(err, imgcheck.ErrTooBig) {
@@ -246,10 +310,10 @@ func TestChromaKeyRefusesHugeInput(t *testing.T) {
 	MaxKeyPixels = 100
 	t.Cleanup(func() { MaxKeyPixels = old })
 	g := color.NRGBA{0, 255, 0, 255}
-	if _, err := ChromaKey(encPNG(t, solid(10, 10, g))); err != nil {
+	if _, err := ChromaKey(encPNG(t, solid(10, 10, g)), Green); err != nil {
 		t.Fatalf("at the limit: %v", err)
 	}
-	_, err := ChromaKey(encPNG(t, solid(11, 10, g)))
+	_, err := ChromaKey(encPNG(t, solid(11, 10, g)), Green)
 	if !errors.Is(err, ErrKeyTooBig) || !bytes.Contains([]byte(err.Error()), []byte("--resize")) {
 		t.Fatalf("want ErrKeyTooBig suggesting --resize, got %v", err)
 	}
@@ -258,7 +322,7 @@ func TestChromaKeyRefusesHugeInput(t *testing.T) {
 func TestChromaKeyNeedsNoExtraCopyForNRGBA(t *testing.T) {
 	im := solid(40, 40, color.NRGBA{0, 255, 0, 255})
 	im.SetNRGBA(20, 20, color.NRGBA{200, 0, 0, 255})
-	out, err := ChromaKey(encPNG(t, im))
+	out, err := ChromaKey(encPNG(t, im), Green)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -73,14 +73,44 @@ func (d *denoiseFlag) Set(v string) error {
 
 func (d *denoiseFlag) IsBoolFlag() bool { return true }
 
+// screenFlag is --remove-bg[=magenta|green]. It is a boolean flag, so a
+// bare --remove-bg means magenta and green needs the = form.
+type screenFlag struct {
+	on     bool
+	screen post.Screen
+}
+
+func (s *screenFlag) String() string {
+	if !s.on {
+		return ""
+	}
+	return s.screen.Name
+}
+
+func (s *screenFlag) Set(v string) error {
+	if v == "false" {
+		*s = screenFlag{}
+		return nil
+	}
+	sc, err := post.ParseScreen(v)
+	if err != nil {
+		return err
+	}
+	s.on, s.screen = true, sc
+	return nil
+}
+
+func (s *screenFlag) IsBoolFlag() bool { return true }
+
 // genOpts holds the parsed flags of gen, edit and the defaults of batch.
 type genOpts struct {
 	prov, model, size, aspect, quality, format, bg, outDir, name, promptFile string
-	maskPath, resize, crop                                                   string
-	n                                                                        int
+	maskPath, resize, crop, palette                                          string
+	n, pixel, colors                                                         int
 	inputs, sets                                                             listFlag
 	extra                                                                    map[string]any // batch "set" objects, merged over sets
-	asJSON, meta, dryRun, removeBG                                           bool
+	asJSON, meta, dryRun                                                     bool
+	removeBG                                                                 screenFlag
 	timeout                                                                  time.Duration
 	timeoutSet                                                               bool // --timeout (or a profile) gave the deadline
 	denoise                                                                  denoiseFlag
@@ -125,7 +155,10 @@ func registerGenFlags(fs *flag.FlagSet, o *genOpts) {
 	fs.StringVar(&o.resize, "resize", "", "resize output to WxH[:fit|fill|stretch] (default fill)")
 	fs.StringVar(&o.crop, "crop", "", "crop output to x,y,w,h")
 	fs.Var(&o.denoise, "denoise", "reduce grain and speckle first: --denoise[=light|medium|strong] (default light)")
-	fs.BoolVar(&o.removeBG, "remove-bg", false, "ask for a green background and key it out (PNG output)")
+	fs.Var(&o.removeBG, "remove-bg", "ask for a flat background and key it out (PNG output): --remove-bg[=magenta|green] (default magenta)")
+	fs.IntVar(&o.pixel, "pixel", 0, "turn the image into pixel art this many pixels tall (PNG output)")
+	fs.IntVar(&o.colors, "colors", 0, "with --pixel: number of colors (default 24)")
+	fs.StringVar(&o.palette, "palette", "", "with --pixel: use the colors of this image (a cutout or a palette swatch)")
 	registerExtraFlags(fs, o)
 }
 
@@ -211,6 +244,22 @@ func buildRequest(ctx context.Context, env Env, o *genOpts, pos []string, edit b
 	return req, nil
 }
 
+// flattenInputs puts each input with transparent pixels on the screen color
+// of --remove-bg, so a cutout given as a reference shows the model the
+// background it must draw. The mask is never changed.
+func flattenInputs(ins []provider.Image, s post.Screen) error {
+	for i := range ins {
+		out, ok, err := post.Flatten(ins[i].Data, s)
+		if err != nil {
+			return fmt.Errorf("input %d: %w", i+1, err)
+		}
+		if ok {
+			ins[i] = provider.Image{MimeType: "image/png", Data: out}
+		}
+	}
+	return nil
+}
+
 // checkInputs checks the -i, --mask and stdin rules before anything is read.
 func checkInputs(o *genOpts, pos []string, edit bool) error {
 	if edit && len(o.inputs) == 0 {
@@ -267,8 +316,14 @@ func execute(ctx context.Context, env Env, o *genOpts, pos []string, edit bool, 
 	if err != nil {
 		return nil, err
 	}
-	ps, err := parsePost(o.resize, o.crop, o.removeBG, o.denoise.level)
+	ps, err := parsePost(o.resize, o.crop, o.removeBG.on, o.denoise.level)
 	if err != nil {
+		return nil, err
+	}
+	if o.removeBG.on {
+		ps.screen = o.removeBG.screen
+	}
+	if err := ps.parsePixel(o.pixel, o.colors, o.palette); err != nil {
 		return nil, err
 	}
 	deadline, err := callTimeout(o, cfg)
@@ -286,7 +341,10 @@ func execute(ctx context.Context, env Env, o *genOpts, pos []string, edit bool, 
 	}
 	oc := &outcome{cfg: cfg, req: req, post: ps, o: o, prompt: req.Prompt, red: newRedactor(env)}
 	if ps.removeBG {
-		oc.req.Prompt += " " + post.ChromaPrompt
+		oc.req.Prompt += " " + ps.screen.Prompt()
+		if err := flattenInputs(oc.req.Inputs, ps.screen); err != nil {
+			return nil, err
+		}
 	}
 	if o.dryRun {
 		return oc.dryRun(env, info), nil

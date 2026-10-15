@@ -158,7 +158,10 @@ func genFlagHelp(cmd string) []helpGroup {
 			{"--denoise[=LEVEL]", "remove grain first: light, medium, strong (default light)"},
 			{"--resize WxH[:MODE]", "resize; MODE is fit, fill or stretch (default fill)"},
 			{"--crop X,Y,W,H", "crop to this box"},
-			{"--remove-bg", "render on green and key it out (PNG output)"},
+			{"--remove-bg[=green]", "render on magenta (or green) and key it out (PNG output)"},
+			{"--pixel H", "turn into pixel art H pixels tall (PNG output; resize stays sharp)"},
+			{"--colors N", "with --pixel: number of colors (default 24)"},
+			{"--palette FILE", "with --pixel: use this image's colors (a cutout or a swatch)"},
 		}},
 		{"Output", [][2]string{
 			{"-o, --output DIR", "output folder (default .), or - for stdout (one image)"},

@@ -434,7 +434,14 @@ func (oc *outcome) printDry(w io.Writer) {
 		fmt.Fprintf(w, "extra: %s\n", safe(string(b)))
 	}
 	if d.Post.RemoveBG {
-		fmt.Fprintln(w, "remove-bg: yes (output is PNG)")
+		fmt.Fprintf(w, "remove-bg: %s (output is PNG)\n", d.Post.Screen)
+	}
+	if d.Post.Pixel > 0 {
+		colors := fmt.Sprintf("%d colors", d.Post.Colors)
+		if d.Post.Palette != "" {
+			colors = "the colors of " + safe(d.Post.Palette)
+		}
+		fmt.Fprintf(w, "pixel: %d pixels tall, %s (output is PNG)\n", d.Post.Pixel, colors)
 	}
 	if oc.costKnown {
 		fmt.Fprintf(w, "cost: ~$%.3f\n", oc.cost)
