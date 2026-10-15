@@ -218,7 +218,7 @@ func TestDefaultPolicyBlocksPrivateAndHTTP(t *testing.T) {
 	defer srv.Close()
 	for _, def := range []struct{ base, host string }{{geminiBase, geminiHost}, {openaiBase, openaiHost}} {
 		b := newBackend(def.base, def.host, "X-Goog-Api-Key", "k")
-		err := call(context.Background(), b, http.MethodGet, srv.URL+"/x", nil, &struct{}{})
+		err := call(context.Background(), b, http.MethodGet, srv.URL+"/x", nil, retry, &struct{}{})
 		if !errors.Is(err, netguard.ErrBlocked) {
 			t.Fatalf("%s: err = %v, want netguard.ErrBlocked", def.host, err)
 		}
@@ -250,10 +250,10 @@ func TestKeyOnlyToAuthHost(t *testing.T) {
 	defer srv.Close()
 	b := newBackend(srv.URL, geminiHost, "X-Goog-Api-Key", "k")
 	other := hostSwap(t, srv.URL)
-	if err := call(context.Background(), b, http.MethodGet, other, nil, &struct{}{}); err == nil {
+	if err := call(context.Background(), b, http.MethodGet, other, nil, retry, &struct{}{}); err == nil {
 		t.Fatal("request to a non-configured host must fail")
 	}
-	if err := call(context.Background(), b, http.MethodGet, srv.URL, nil, &struct{}{}); err != nil || got != "k" {
+	if err := call(context.Background(), b, http.MethodGet, srv.URL, nil, retry, &struct{}{}); err != nil || got != "k" {
 		t.Fatalf("err %v key %q", err, got)
 	}
 }

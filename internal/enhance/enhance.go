@@ -51,6 +51,13 @@ var (
 // retry is the HTTP retry policy; tests shrink it.
 var retry = httpx.DefaultPolicy()
 
+// paid is retry with Paid set: a call that bills is retried only after a 429.
+func paid() httpx.Policy {
+	p := retry
+	p.Paid = true
+	return p
+}
+
 // Prompt rewrites prompt into a detailed image prompt.
 func Prompt(ctx context.Context, cfg Config, prompt string) (string, error) {
 	if strings.TrimSpace(prompt) == "" {
@@ -95,7 +102,9 @@ func newBackend(base, defHost, keyHeader, key string) *backend {
 	return &backend{client: c, pol: pol, keyHeader: keyHeader, key: key}
 }
 
-func call(ctx context.Context, b *backend, method, rawURL string, body []byte, out any) error {
+// call sends one JSON request under the retry policy rp and decodes a 2xx body
+// into out. For a paid rp, a 408 or 5xx error ends with the hint.
+func call(ctx context.Context, b *backend, method, rawURL string, body []byte, rp httpx.Policy, out any) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
@@ -118,7 +127,7 @@ func call(ctx context.Context, b *backend, method, rawURL string, body []byte, o
 			req.Header.Set(b.keyHeader, b.key)
 		}
 		return req, nil
-	}, retry)
+	}, rp)
 	if err != nil {
 		return err
 	}
@@ -127,7 +136,7 @@ func call(ctx context.Context, b *backend, method, rawURL string, body []byte, o
 		if len(msg) > 300 {
 			msg = msg[:300]
 		}
-		return fmt.Errorf("%w %d: %s", errStatus, status, msg)
+		return fmt.Errorf("%w %d: %s%s", errStatus, status, msg, rp.Hint(status))
 	}
 	return json.Unmarshal(rb, out)
 }
@@ -226,7 +235,7 @@ func geminiPrompt(ctx context.Context, cfg Config, prompt string) (string, error
 		var list struct {
 			Models []listedModel `json:"models"`
 		}
-		if err := call(ctx, b, http.MethodGet, base+"/models?pageSize=1000", nil, &list); err != nil {
+		if err := call(ctx, b, http.MethodGet, base+"/models?pageSize=1000", nil, retry, &list); err != nil {
 			return "", fmt.Errorf("list models: %w", err)
 		}
 		var err error
@@ -250,7 +259,7 @@ func geminiPrompt(ctx context.Context, cfg Config, prompt string) (string, error
 			} `json:"content"`
 		} `json:"candidates"`
 	}
-	if err := call(ctx, b, http.MethodPost, base+"/models/"+model+":generateContent", body, &resp); err != nil {
+	if err := call(ctx, b, http.MethodPost, base+"/models/"+model+":generateContent", body, paid(), &resp); err != nil {
 		return "", err
 	}
 	var sb strings.Builder
@@ -298,7 +307,7 @@ func openaiPrompt(ctx context.Context, cfg Config, prompt string) (string, error
 		} `json:"output"`
 	}
 	b := newBackend(base, openaiHost, "Authorization", key)
-	if err := call(ctx, b, http.MethodPost, base+"/responses", body, &resp); err != nil {
+	if err := call(ctx, b, http.MethodPost, base+"/responses", body, paid(), &resp); err != nil {
 		return "", err
 	}
 	var sb strings.Builder

@@ -20,7 +20,7 @@ func TestLive(t *testing.T) {
 		Models []listedModel `json:"models"`
 	}
 	b := newBackend(geminiBase, geminiHost, "X-Goog-Api-Key", key)
-	if err := call(context.Background(), b, "GET", geminiBase+"/models?pageSize=1000", nil, &list); err != nil {
+	if err := call(context.Background(), b, "GET", geminiBase+"/models?pageSize=1000", nil, retry, &list); err != nil {
 		t.Fatal(err)
 	}
 	m, err := pickModel(list.Models)
