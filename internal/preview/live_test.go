@@ -133,11 +133,13 @@ func TestLiveITerm(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := b.String()
+	got := payload(t, s)
 	// 1000x500 into 800x440 px: 800x400, 20 rows.
-	want := "\x1b8\x1b[J\x1b]1337;File=inline=1;size=" + itoa(len(data)) + ";height=20;preserveAspectRatio=1:"
+	want := "\x1b8\x1b[J\x1b]1337;File=inline=1;size=" + itoa(len(got)) + ";height=20;preserveAspectRatio=1:"
 	if !strings.Contains(s, want) || !strings.HasSuffix(s, "\a\x1b8\x1b[20B\r") {
 		t.Errorf("iterm frame: %q ... %q", head(s), tail(s))
 	}
+	samePixels(t, got, data)
 }
 
 func TestLiveRejectsPixelBombAndJunk(t *testing.T) {

@@ -304,10 +304,12 @@ func TestInlineKittyGolden(t *testing.T) {
 	if !ok || err != nil {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
-	want := "\x1b_Ga=T,f=100,m=0;" + base64.StdEncoding.EncodeToString(data) + "\x1b\\\n"
+	got := payload(t, b.String())
+	want := "\x1b_Ga=T,f=100,m=0;" + base64.StdEncoding.EncodeToString(got) + "\x1b\\\n"
 	if b.String() != want {
 		t.Fatalf("got %q\nwant %q", b.String(), want)
 	}
+	samePixels(t, got, data)
 }
 
 func TestInlineKittyChunked(t *testing.T) {
@@ -352,9 +354,10 @@ func TestInlineKittyChunked(t *testing.T) {
 		joined.WriteString(payload)
 	}
 	got, err := base64.StdEncoding.DecodeString(joined.String())
-	if err != nil || !bytes.Equal(got, enc.Bytes()) {
-		t.Fatalf("payload mismatch: %v", err)
+	if err != nil {
+		t.Fatalf("payload: %v", err)
 	}
+	samePixels(t, got, enc.Bytes())
 }
 
 func TestInlineITermGolden(t *testing.T) {
@@ -369,10 +372,12 @@ func TestInlineITermGolden(t *testing.T) {
 		if !ok || err != nil {
 			t.Fatalf("%s: ok=%v err=%v", prog, ok, err)
 		}
-		want := "\x1b]1337;File=inline=1;size=" + itoa(len(data)) + ":" + base64.StdEncoding.EncodeToString(data) + "\a\n"
+		got := payload(t, b.String())
+		want := "\x1b]1337;File=inline=1;size=" + itoa(len(got)) + ":" + base64.StdEncoding.EncodeToString(got) + "\a\n"
 		if b.String() != want {
 			t.Fatalf("%s: got %q\nwant %q", prog, b.String(), want)
 		}
+		samePixels(t, got, data)
 	}
 }
 
