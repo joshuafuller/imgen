@@ -209,9 +209,7 @@ func (c *Client) generate(ctx context.Context, req provider.Request, onPartial f
 		}
 	}
 	transparent := req.Background == "transparent"
-	if transparent && c.TransparentModel != "" && req.Model == c.DefaultModel {
-		req.Model = c.TransparentModel
-	}
+	req = c.effective(req)
 	var (
 		imgs     []provider.Image
 		err      error
@@ -236,6 +234,15 @@ func (c *Client) generate(ctx context.Context, req provider.Request, onPartial f
 		}
 	}
 	return res, nil
+}
+
+// effective is req with the instance's model choice applied: a transparent
+// background on the default model uses TransparentModel.
+func (c *Client) effective(req provider.Request) provider.Request {
+	if req.Background == "transparent" && c.TransparentModel != "" && req.Model == c.DefaultModel {
+		req.Model = c.TransparentModel
+	}
+	return req
 }
 
 // newRequest returns the request builder for a generate or edit call.

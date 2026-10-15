@@ -21,6 +21,8 @@ type streamFake struct {
 	streamErr error
 }
 
+func (s *streamFake) StreamPartials(provider.Request) int { return 2 }
+
 func (s *streamFake) GenerateStream(ctx context.Context, r provider.Request, onPartial func(provider.Image)) (*provider.Result, error) {
 	s.streamed++
 	onPartial(provider.Image{MimeType: "image/png", Data: []byte("p0")})

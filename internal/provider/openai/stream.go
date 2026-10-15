@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +14,9 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/joshuafuller/imgen/internal/httpx"
 	"github.com/joshuafuller/imgen/internal/imgcheck"
@@ -36,9 +40,34 @@ func (c *Client) GenerateStream(ctx context.Context, req provider.Request, onPar
 	return c.generate(ctx, req, onPartial)
 }
 
-// canStream: one image from a GPT Image model on a client that streams.
+// StreamPartials is the partial_images value GenerateStream sends for req,
+// 0 when the request will not stream.
+func (c *Client) StreamPartials(req provider.Request) int {
+	if !c.canStream(c.effective(req)) {
+		return 0
+	}
+	return streamPartials
+}
+
+// canStream: one image from a GPT Image model on a client that streams,
+// whose key has not been refused streaming in this process.
 func (c *Client) canStream(req provider.Request) bool {
-	return !c.NoStream && req.N <= 1 && !strings.HasPrefix(req.Model, "dall-e")
+	if c.NoStream || req.N > 1 || strings.HasPrefix(req.Model, "dall-e") {
+		return false
+	}
+	_, refused := streamRefused.Load(c.refusalKey())
+	return !refused
+}
+
+// streamRefused holds the endpoints and keys (hashed) that the API refused
+// to stream, for example an organization that is not verified. A refusal
+// lasts for the process, so batch jobs and interactive calls do not repeat
+// the refused request.
+var streamRefused sync.Map
+
+func (c *Client) refusalKey() string {
+	sum := sha256.Sum256([]byte(c.base() + "\x00" + c.APIKey))
+	return hex.EncodeToString(sum[:])
 }
 
 // stream runs one streamed call. fallback is true when the stream did not
@@ -70,7 +99,11 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, httpx.DefaultPolicy().MaxBytes))
 		serr := statusError(resp.StatusCode, body)
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 || refusesStream(serr) {
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return nil, true, nil
+		}
+		if refusesStream(serr) {
+			streamRefused.Store(c.refusalKey(), struct{}{})
 			return nil, true, nil
 		}
 		return nil, false, serr
@@ -89,10 +122,13 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 	return imgs, false, err
 }
 
-// refusesStream reports an API error about the stream options themselves.
+// streamWords finds an API error about the stream options themselves
+// ("must be verified to stream", "partial_images"), not "upstream".
+var streamWords = regexp.MustCompile(`(?i)\b(stream|streaming|partial_images)\b`)
+
+// refusesStream reports a refusal of the stream options themselves.
 func refusesStream(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "stream") || strings.Contains(msg, "partial_images")
+	return streamWords.MatchString(err.Error())
 }
 
 func readCapped(r io.Reader, maxBytes int64) ([]byte, error) {

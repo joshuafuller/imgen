@@ -108,6 +108,10 @@ type Provider interface {
 // and may fall back to a plain Generate (no partials) for any request.
 type Streamer interface {
 	GenerateStream(ctx context.Context, req Request, onPartial func(Image)) (*Result, error)
+	// StreamPartials is how many partial images GenerateStream asks for
+	// with req, 0 when it will not stream. Callers price the partials
+	// (they may be billed) before the call.
+	StreamPartials(req Request) int
 }
 
 // Config describes one configured provider instance. Built-in instances

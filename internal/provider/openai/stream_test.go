@@ -383,3 +383,87 @@ func TestFactoryCustomBaseURLDoesNotStream(t *testing.T) {
 		t.Error("custom base URL streams")
 	}
 }
+
+func TestStreamPartials(t *testing.T) {
+	c := New("sk")
+	if n := c.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
+		t.Errorf("plain request: %d", n)
+	}
+	for _, req := range []provider.Request{{N: 2}, {Model: "dall-e-3"}} {
+		if n := c.StreamPartials(req); n != 0 {
+			t.Errorf("%+v: %d", req, n)
+		}
+	}
+	c.NoStream = true
+	if n := c.StreamPartials(provider.Request{}); n != 0 {
+		t.Errorf("NoStream: %d", n)
+	}
+}
+
+// A refusal to stream is remembered for the key and endpoint: later calls
+// in the process (new clients included) go straight to the plain call.
+func TestStreamRefusalRemembered(t *testing.T) {
+	t.Cleanup(streamRefused.Clear)
+	final := pngOf(t, 4, 4)
+	var streamed, plain atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["stream"] == true {
+			streamed.Add(1)
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"error":{"message":"Your organization must be verified to stream this model."}}`)
+			return
+		}
+		plain.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": b64(final)}}})
+	}))
+	defer srv.Close()
+	_, onPartial := collectPartials()
+	for range 3 {
+		c := newTestClient(srv)
+		if _, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if streamed.Load() != 1 || plain.Load() != 3 {
+		t.Errorf("stream requests %d, plain %d", streamed.Load(), plain.Load())
+	}
+	if n := newTestClient(srv).StreamPartials(provider.Request{Prompt: "x"}); n != 0 {
+		t.Errorf("StreamPartials after a refusal: %d", n)
+	}
+	other := newTestClient(srv)
+	other.APIKey = "sk-other-org"
+	if n := other.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
+		t.Errorf("another key inherits the refusal: %d", n)
+	}
+}
+
+// A busy server is not a refusal: the next call streams again.
+func TestStreamBusyNotRemembered(t *testing.T) {
+	t.Cleanup(streamRefused.Clear)
+	srv := streamServer(t, nil, func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	c := newTestClient(srv)
+	c.Retry = httpx.Policy{Attempts: 1}
+	_, onPartial := collectPartials()
+	_, _ = c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
+	if n := c.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
+		t.Errorf("StreamPartials after a 503: %d", n)
+	}
+}
+
+func TestRefusesStream(t *testing.T) {
+	for msg, want := range map[string]bool{
+		"Your organization must be verified to stream this model.": true,
+		"partial_images is not supported for this model":           true,
+		"Streaming is not available":                               true,
+		"upstream connect error":                                   false,
+		"Your request was rejected by the safety system.":          false,
+	} {
+		if got := refusesStream(errors.New(msg)); got != want {
+			t.Errorf("%q: %v", msg, got)
+		}
+	}
+}
