@@ -334,7 +334,7 @@ func TestCostOnStderr(t *testing.T) {
 	if c := h.run("gen", "-o", t.TempDir(), "cat"); c != 0 {
 		t.Fatal(h.errb.String())
 	}
-	if !strings.Contains(h.errb.String(), "cost: ~$0.067") {
+	if !strings.Contains(h.errb.String(), "cost: "+geminiCost("cat")+"\n") {
 		t.Errorf("stderr %q", h.errb.String())
 	}
 	if c := h.run("gen", "-o", t.TempDir(), "-m", "no-such-model-xyz", "cat"); c != 0 {

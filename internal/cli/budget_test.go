@@ -17,11 +17,17 @@ import (
 
 func perCall(t *testing.T) float64 {
 	t.Helper()
-	per, ok := pricing.Estimate("openai", "gpt-image-2", "1024x1024", "high", 1)
+	per, ok := catCeiling("openai", "gpt-image-2", "1024x1024", "high")
 	if !ok || per <= 0 {
 		t.Skip("no price for gpt-image-2")
 	}
 	return per
+}
+
+// catCeiling is the ceiling of one image for the prompt "a cat" (or any
+// other prompt of 5 bytes), with no input images.
+func catCeiling(typ, model, size, quality string) (float64, bool) {
+	return pricing.Ceiling(pricing.Call{Type: typ, Model: model, Size: size, Quality: quality, N: 1, PromptBytes: len("a cat")})
 }
 
 var genArgs = []string{"gen", "-p", "openai", "-m", "gpt-image-2", "-q", "high", "-r", "1024x1024"}
@@ -176,7 +182,7 @@ func TestBudget(t *testing.T) {
 
 func TestBudgetParallelBatchCannotOverspend(t *testing.T) {
 	h, rf := rawHarness(t, provider.Image{MimeType: "image/png", Data: tinyPNG(1)})
-	per, ok := pricing.Estimate("openai", "gpt-image-2", "1024x1024", "high", 1)
+	per, ok := catCeiling("openai", "gpt-image-2", "1024x1024", "high")
 	if !ok || per <= 0 {
 		t.Skip("no price for gpt-image-2")
 	}

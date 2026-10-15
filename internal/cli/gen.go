@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -368,14 +369,54 @@ func (oc *outcome) dryRun(env Env, info io.Writer) *outcome {
 	return oc
 }
 
-// estimate prices the call, plus the partial images it will stream.
+// estimate prices the call before it is sent: its top price, plus the
+// partial images it will stream. The budget holds this amount.
 func (oc *outcome) estimate() {
-	n := max(oc.req.N, 1)
-	oc.cost, oc.costKnown = pricing.Estimate(oc.cfg.Type, oc.req.Model, oc.req.Size, oc.req.Quality, n)
+	oc.cost, oc.costKnown = pricing.Ceiling(oc.priceCall())
 	if oc.plan.partials > 0 && oc.costKnown {
 		extra, _ := pricing.Partials(oc.cfg.Type, oc.req.Model, oc.plan.partials) // planStream checked it
 		oc.cost += extra
 	}
+}
+
+// priceCall is the request as the price table needs it.
+func (oc *outcome) priceCall() pricing.Call {
+	r := oc.req
+	c := pricing.Call{
+		Type: oc.cfg.Type, Model: r.Model, Size: r.Size, Quality: r.Quality, AspectRatio: r.AspectRatio,
+		N: r.N, PromptBytes: len(r.Prompt), Extra: r.Extra,
+	}
+	ins := r.Inputs
+	if r.Mask != nil {
+		ins = append(slices.Clone(ins), *r.Mask)
+	}
+	for _, in := range ins {
+		_, w, h, _ := imgcheck.Validate(in.Data, in.MimeType) // header only; read and checked before
+		c.Inputs = append(c.Inputs, pricing.Dims{W: w, H: h})
+	}
+	return c
+}
+
+// priceUsage replaces the estimate of a call that ran with the cost of the
+// tokens the official API reported, when the price table has their rates.
+// Streamed partial images are billed on top of those tokens.
+func (oc *outcome) priceUsage(res *provider.Result) {
+	if !oc.costKnown {
+		return
+	}
+	model := res.Model
+	if model == "" || !pricing.Known(oc.cfg.Type, model) {
+		model = oc.req.Model
+	}
+	usd, ok := pricing.FromUsage(oc.cfg.Type, model, res.Usage, len(res.Images))
+	if !ok {
+		return
+	}
+	if oc.plan.partials > 0 {
+		extra, _ := pricing.Partials(oc.cfg.Type, model, oc.plan.partials)
+		usd += extra
+	}
+	oc.cost = usd
 }
 
 func (oc *outcome) run(ctx context.Context, env Env, info io.Writer) error {
@@ -439,6 +480,7 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 		return nil, err
 	}
 	oc.noteAttempts(res.Attempts)
+	oc.priceUsage(res)
 	oc.elapsed = env.Now().Sub(start)
 	if !oc.o.tidy {
 		reportResult(info, res, oc.req.Model, oc.elapsed)
@@ -456,9 +498,9 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 	return res.Images, nil
 }
 
-// reserveBudget holds the estimated cost against IMGEN_BUDGET before the paid
-// call, so parallel jobs and processes cannot all pass on the same stale
-// total. An unknown price is denied while a budget is set. --force skips it.
+// reserveBudget holds the call's top price against IMGEN_BUDGET before the
+// paid call, so parallel jobs and processes cannot all pass on the same
+// stale total. An unknown price is denied while a budget is set. --force skips it.
 func (oc *outcome) reserveBudget(env Env) error {
 	if oc.o.force {
 		return nil
@@ -474,8 +516,8 @@ func (oc *outcome) reserveBudget(env Env) error {
 // noteAttempts keeps how many times the paid request was sent, for the cost
 // line, the summary and the JSON. It changes no cost: only a 429 on the
 // provider's official API makes imgen send a paid request again, and that
-// API does not bill a 429, so the call books one estimate (or nothing, when
-// every attempt got a 429). The budget hold is that one estimate.
+// API does not bill a 429, so the call books one cost (or nothing, when
+// every attempt got a 429). The budget holds that one call's top price.
 func (oc *outcome) noteAttempts(n int) {
 	if n > 1 {
 		oc.attempts = n

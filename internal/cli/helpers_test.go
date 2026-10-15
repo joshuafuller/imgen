@@ -45,6 +45,7 @@ type fake struct {
 	genEr  error
 	got    []provider.Request
 	nimg   int
+	usage  provider.Usage // reported on every result
 }
 
 func (f *fake) Name() string { return f.name }
@@ -60,7 +61,7 @@ func (f *fake) Generate(_ context.Context, r provider.Request) (*provider.Result
 	if n == 0 {
 		n = 1
 	}
-	res := &provider.Result{}
+	res := &provider.Result{Usage: f.usage}
 	for i := range n {
 		res.Images = append(res.Images, provider.Image{MimeType: "image/png", Data: tinyPNG(i)})
 	}

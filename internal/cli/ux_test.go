@@ -88,7 +88,7 @@ func TestPlainStderrIsUnchanged(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()
 	mustRun(t, h, "gen", "-o", dir, "--name", "a", "a cat")
-	if got, want := h.errb.String(), "model: gemini-3.1-flash-image\ntime: 0s\ncost: ~$0.067\n"; got != want {
+	if got, want := h.errb.String(), "model: gemini-3.1-flash-image\ntime: 0s\ncost: "+geminiCost("a cat")+"\n"; got != want {
 		t.Errorf("gen stderr:\n got %q\nwant %q", got, want)
 	}
 	mustRun(t, h, "gen", "-o", dir, "--name", "b", "--cache", "a dog")
@@ -265,7 +265,7 @@ func TestTerminalSummaryIsOneLine(t *testing.T) {
 	h.env.Styled = func(io.Writer) bool { return true }
 	dir := t.TempDir()
 	mustRun(t, h, "gen", "-o", dir, "--name", "a", "a cat")
-	if got, want := h.errb.String(), "\x1b[32m✓\x1b[0m 1 image · gemini-3.1-flash-image · 0s · ~$0.067\n"; got != want {
+	if got, want := h.errb.String(), "\x1b[32m✓\x1b[0m 1 image · gemini-3.1-flash-image · 0s · "+geminiCost("a cat")+"\n"; got != want {
 		t.Errorf("summary:\n got %q\nwant %q", got, want)
 	}
 	if strings.Contains(h.out.String(), "\x1b") {

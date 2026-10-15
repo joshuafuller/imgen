@@ -319,7 +319,7 @@ func TestQRDryRun(t *testing.T) {
 		t.Fatalf("%d calls in a dry run", qf.calls)
 	}
 	for _, want := range []string{"dry run: no API call made", "inputs: (the QR guide)", "version 5 (37x37 modules)",
-		"cost of one try: ~$0.067", "cost of up to 3 tries: ~$0.201"} {
+		"cost of one try: ~$0.074", "cost of up to 3 tries: ~$0.221"} {
 		if !strings.Contains(h.out.String(), want) {
 			t.Errorf("dry run lacks %q:\n%s", want, h.out.String())
 		}

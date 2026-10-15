@@ -21,7 +21,6 @@ import (
 	"github.com/joshuafuller/imgen/internal/history"
 	"github.com/joshuafuller/imgen/internal/httpx"
 	"github.com/joshuafuller/imgen/internal/httpx/httpxtest"
-	"github.com/joshuafuller/imgen/internal/pricing"
 	"github.com/joshuafuller/imgen/internal/provider"
 	"github.com/joshuafuller/imgen/internal/provider/openai"
 )
@@ -395,11 +394,11 @@ func TestCompareBooksRetriedCallsOnce(t *testing.T) {
 				}
 			}
 			gem, _ := out.Providers[0].Result["cost_usd"].(float64)
-			oa, known := pricing.Estimate("openai", h.env.Rules.DefaultModel("openai"), "1024x1024", "high", 1)
+			oa, known := catCeiling("openai", h.env.Rules.DefaultModel("openai"), "1024x1024", "high")
 			if tc.limited {
 				oa = 0
 			}
-			gemOnce, _ := pricing.Estimate("gemini", h.env.Rules.DefaultModel("gemini"), "1024x1024", "high", 1)
+			gemOnce, _ := catCeiling("gemini", h.env.Rules.DefaultModel("gemini"), "1024x1024", "high")
 			es := histEntries(t)
 			if len(es) != 1 || gem <= 0 || !known || !sameUSD(gem, gemOnce) || !sameUSD(es[0].CostUSD, gem+oa) {
 				t.Fatalf("history %+v (gemini $%v, once $%v), want gemini's one estimate plus openai's $%v", es, gem, gemOnce, oa)

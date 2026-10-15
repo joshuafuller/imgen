@@ -78,7 +78,7 @@ func streamGen(dir string, extra ...string) []string {
 func streamCosts(t *testing.T) (base, partials float64) {
 	t.Helper()
 	t.Setenv("IMGEN_PRICES", "")
-	base, ok1 := pricing.Estimate("openai", "gpt-image-2", "1024x1024", "low", 1)
+	base, ok1 := catCeiling("openai", "gpt-image-2", "1024x1024", "low")
 	partials, ok2 := pricing.Partials("openai", "gpt-image-2", 2)
 	if !ok1 || !ok2 || base <= 0 || partials <= 0 {
 		t.Fatalf("prices: %v %v %v %v", base, ok1, partials, ok2)
@@ -161,7 +161,12 @@ func TestStreamNotWhenUnpriced(t *testing.T) {
 	sf.noStream = true
 	mustRun(t, h, streamGen(t.TempDir())...)
 	h2, sf2, _ := streamHarness(t, true, true, nil)
-	mustRun(t, h2, "gen", "-p", "gemini", "-m", "gemini-2.5-flash-image", "-o", t.TempDir(), "a cat")
+	prices := filepath.Join(t.TempDir(), "prices.json")
+	if err := os.WriteFile(prices, []byte(`{"models":[{"provider":"openai","match":"no-rate*","price":0.04}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("IMGEN_PRICES", prices) // a price, but no image output rate for the partials
+	mustRun(t, h2, "gen", "-p", "openai", "-m", "no-rate-1", "-o", t.TempDir(), "a cat")
 	if sf.streamed != 0 || sf2.streamed != 0 {
 		t.Errorf("streamed %d, %d", sf.streamed, sf2.streamed)
 	}

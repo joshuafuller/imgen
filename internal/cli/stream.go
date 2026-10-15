@@ -31,7 +31,7 @@ func (oc *outcome) planStream(env Env, p provider.Provider, info io.Writer) stre
 	if n <= 0 {
 		return streamPlan{}
 	}
-	if _, known := pricing.Estimate(oc.cfg.Type, oc.req.Model, oc.req.Size, oc.req.Quality, 1); known {
+	if pricing.Known(oc.cfg.Type, oc.req.Model) {
 		if _, ok := pricing.Partials(oc.cfg.Type, oc.req.Model, n); !ok {
 			return streamPlan{}
 		}
