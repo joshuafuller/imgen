@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joshuafuller/imgen/internal/httpx"
+	"github.com/joshuafuller/imgen/internal/httpx/httpxtest"
 	"github.com/joshuafuller/imgen/internal/provider"
 )
 
@@ -148,8 +150,9 @@ func TestPaidSubmitServerErrorNotRetried(t *testing.T) {
 	}
 }
 
-// A 429 is not retried either: the provider controls the status, so it does
-// not prove that the submit was not billed. The error says when to run it again.
+// On a custom endpoint a 429 is not retried either: the provider controls
+// the status, so it does not prove that the submit was not billed. The
+// error says when to run it again.
 func TestPaidSubmit429NotRetried(t *testing.T) {
 	c, count := flaky(t, map[string][]int{submitPath: {http.StatusTooManyRequests}})
 	_, err := generate(c)
@@ -196,5 +199,92 @@ func TestFreeStatusErrorHasNoPaidHint(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), httpx.PaidHint) {
 		t.Errorf("a status poll cannot bill, but its error says it may have: %q", err)
+	}
+}
+
+// official is a client on fal's own queue host whose requests all reach a
+// test server. The server answers the submits with the statuses in submit,
+// in order (the last repeats; 200 is the normal answer), and runs the rest
+// of the queue flow on fal hosts; with failStatus the status poll answers
+// 404. sent returns how many submits arrived.
+func official(t *testing.T, submit []int, failStatus bool) (c *Client, sent func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case submitPath:
+			if r.Host != defaultHost {
+				t.Errorf("submit to %s, want %s", r.Host, defaultHost)
+			}
+			mu.Lock()
+			n++
+			code := submit[min(n, len(submit))-1]
+			mu.Unlock()
+			if code != http.StatusOK {
+				w.WriteHeader(code)
+				_, _ = w.Write([]byte(`{"detail":"fault"}`))
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"status_url":"https://%s%s","response_url":"https://%s%s"}`, defaultHost, statusPath, defaultHost, resultPath)
+		case statusPath:
+			if failStatus {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write([]byte(`{"status":"COMPLETED"}`))
+		case resultPath:
+			_, _ = fmt.Fprintf(w, `{"images":[{"url":"https://v3.fal.media%s"}]}`, imagePath)
+		case imagePath:
+			_, _ = w.Write([]byte(pngMagic))
+		default:
+			t.Errorf("path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c = New("k")
+	c.HTTP = httpxtest.Via(srv)
+	c.PollInterval = time.Millisecond
+	return c, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return n
+	}
+}
+
+// On fal's own queue host the submit is sent again after a 429, and only
+// after a 429. Result.Attempts, or the error, counts every submit, also
+// when a later step fails. The 429s carry no Retry-After, so each retry
+// waits the 0.5 to 1 s backoff.
+func TestOfficialSubmit429Retried(t *testing.T) {
+	t.Setenv("IMGEN_RETRIES", "3")
+	for _, tc := range []struct {
+		name       string
+		submit     []int
+		failStatus bool
+		submits    int
+		attempts   int
+		fails      bool
+	}{
+		{"429 then 200", []int{http.StatusTooManyRequests, http.StatusOK}, false, 2, 2, false},
+		{"503", []int{http.StatusServiceUnavailable, http.StatusOK}, false, 1, 1, true},
+		{"429 then 200, then the status poll fails", []int{http.StatusTooManyRequests, http.StatusOK}, true, 2, 2, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, sent := official(t, tc.submit, tc.failStatus)
+			res, err := generate(c)
+			if n := sent(); n != tc.submits {
+				t.Fatalf("submits %d, want %d (err %v)", n, tc.submits, err)
+			}
+			if tc.fails {
+				if err == nil || provider.AttemptsOf(err) != tc.attempts {
+					t.Fatalf("err %v (attempts %d), want an error with %d attempts", err, provider.AttemptsOf(err), tc.attempts)
+				}
+				return
+			}
+			if err != nil || res.Attempts != tc.attempts || len(res.Images) != 1 {
+				t.Fatalf("res %+v err %v, want an image and %d attempts", res, err, tc.attempts)
+			}
+		})
 	}
 }

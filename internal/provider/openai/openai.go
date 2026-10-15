@@ -58,7 +58,8 @@ type Client struct {
 	// AllModels makes ListModels return every model (local servers use arbitrary IDs).
 	AllModels bool
 	// Retry overrides httpx.DefaultPolicy when its Attempts is set. A
-	// generate or edit call is still never retried.
+	// generate or edit call is still sent again only after a 429 on the
+	// official API host.
 	Retry httpx.Policy
 	// Download overrides httpx.ImagePolicy for result-image downloads when its Attempts is set.
 	Download httpx.Policy
@@ -220,9 +221,18 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 }
 
 // generate is Generate, streamed when onPartial is set and the request can
-// stream. It makes one call, streamed or plain, never both. Both paths
-// share the model checks and the alpha check.
+// stream. It makes one call, streamed or plain, never both. Only the plain
+// call is sent again, after a 429 on the official API; Result.Attempts, or
+// the error, counts each time it was sent.
 func (c *Client) generate(ctx context.Context, req provider.Request, onPartial func(provider.Image)) (*provider.Result, error) {
+	sent := 0
+	res, err := c.run(ctx, req, onPartial, &sent)
+	return provider.Attempted(res, sent, err)
+}
+
+// run is generate without the count: sent counts the plain requests. Both
+// paths share the model checks and the alpha check.
+func (c *Client) run(ctx context.Context, req provider.Request, onPartial func(provider.Image), sent *int) (*provider.Result, error) {
 	if req.Model != "" {
 		if err := provider.ValidModelID(req.Model); err != nil {
 			return nil, fmt.Errorf("openai: %w", err)
@@ -237,7 +247,7 @@ func (c *Client) generate(ctx context.Context, req provider.Request, onPartial f
 	if onPartial != nil && c.canStream(req) {
 		imgs, err = c.stream(ctx, req, onPartial)
 	} else {
-		imgs, err = c.plain(ctx, req)
+		imgs, err = c.plain(ctx, req, sent)
 	}
 	if err != nil {
 		if transparent && strings.Contains(strings.ToLower(err.Error()), "transparent") {
@@ -284,9 +294,10 @@ func (c *Client) newRequest(ctx context.Context, req provider.Request) func() (*
 	}
 }
 
-// plain runs the call without streaming and returns the images.
-func (c *Client) plain(ctx context.Context, req provider.Request) ([]provider.Image, error) {
-	body, err := c.do(c.newRequest(ctx, req), c.paidPolicy())
+// plain runs the call without streaming and returns the images. sent
+// counts each time the request was sent.
+func (c *Client) plain(ctx context.Context, req provider.Request, sent *int) ([]provider.Image, error) {
+	body, err := c.do(c.newRequest(ctx, req), c.paidPolicy(sent))
 	if err != nil {
 		return nil, err
 	}
@@ -507,10 +518,12 @@ func (c *Client) retryPolicy(inline bool) httpx.Policy {
 }
 
 // paidPolicy is the policy of a generate or edit call, which bills: it is
-// never retried, whatever c.Retry says.
-func (c *Client) paidPolicy() httpx.Policy {
+// sent again only after a 429, and only on the official API host, whatever
+// c.Retry says. sent counts each time it is sent.
+func (c *Client) paidPolicy(sent *int) httpx.Policy {
 	pol := c.retryPolicy(true)
-	pol.Paid = true
+	pol.Paid, pol.Sent = true, sent
+	pol.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return pol
 }
 

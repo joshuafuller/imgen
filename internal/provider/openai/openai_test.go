@@ -271,8 +271,8 @@ func fastRetry() httpx.Policy {
 	return httpx.Policy{Attempts: 3, Base: time.Millisecond, Max: 2 * time.Millisecond}
 }
 
-// A generate call can bill, so a 429 is the answer: no second request. The
-// error says when to run it again.
+// On a custom endpoint a generate call is sent once, so a 429 is the
+// answer: no second request. The error says when to run it again.
 func TestGenerate429NotRetried(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

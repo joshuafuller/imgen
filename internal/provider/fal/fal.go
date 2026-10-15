@@ -138,10 +138,13 @@ func (c *Client) apiPolicy() httpx.Policy {
 	return p
 }
 
-// paidPolicy is apiPolicy for a request that can bill: it is never retried.
-func (c *Client) paidPolicy() httpx.Policy {
+// paidPolicy is apiPolicy for a request that can bill: it is sent again
+// only after a 429, and only on fal's own queue host. sent counts each time
+// it is sent.
+func (c *Client) paidPolicy(sent *int) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid = true
+	p.Paid, p.Sent = true, sent
+	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
 
@@ -181,7 +184,15 @@ func (c *Client) ListModels(context.Context) ([]provider.Model, error) {
 
 // Generate submits to the queue, waits for completion, and downloads the images.
 // Size maps to the model's own field (image_size or aspect_ratio). Input images are sent as data URIs in image_url (one) or image_urls (several).
+// Result.Attempts, or the error, counts each time the submit was sent.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
+	sent := 0
+	res, err := c.generate(ctx, req, &sent)
+	return provider.Attempted(res, sent, err)
+}
+
+// generate is Generate without the count: sent counts the submits.
+func (c *Client) generate(ctx context.Context, req provider.Request, sent *int) (*provider.Result, error) {
 	if req.Model == "" {
 		return nil, errNoModel
 	}
@@ -192,7 +203,7 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.call(ctx, c.paidPolicy(), http.MethodPost, c.base()+"/"+req.Model, buf)
+	resp, err := c.call(ctx, c.paidPolicy(sent), http.MethodPost, c.base()+"/"+req.Model, buf)
 	if err != nil {
 		return nil, err
 	}
