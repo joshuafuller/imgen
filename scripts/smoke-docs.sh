@@ -113,10 +113,11 @@ if [ "$MODE" = mock ]; then
 	chmod 600 "$RUN/mock/env"
 	export IMGEN_ENV_FILE="$RUN/mock/env" CODEX_HOME="$RUN/mock/codex-home"
 	# Codex has no mock (it would use the ChatGPT login). This stand-in records
-	# every call and fails it, so doctor reports codex as not set up.
-	cat >"$RUN/bin/codex" <<'SH'
-#!/bin/sh
-echo "$*" >>"$SMOKE_RUN/mock/codex-calls.log"
+	# every call and fails it, so doctor reports codex as not set up. The log
+	# path is written in: imgen gives codex a minimal environment.
+	cat >"$RUN/bin/codex" <<SH
+#!/usr/bin/env bash
+echo "\$*" >>$(printf '%q' "$RUN/mock/codex-calls.log")
 echo "smoke-docs: codex has no mock" >&2
 exit 1
 SH
