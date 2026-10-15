@@ -8,6 +8,32 @@ Every entry links to the commit that made the change.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-15
+
+A rate limit no longer ends a paid run on the official APIs: imgen tries again, and a refused try costs nothing. Also two new examples and an updated agent skill.
+
+**Full changelog:** [v0.5.1...v0.5.2](https://github.com/joshuafuller/imgen/compare/v0.5.1...v0.5.2)
+
+### Added
+
+- **Docs:** A product photo studio and a consistent illustration pack, as two new worked examples. ([`3f740ae`](https://github.com/joshuafuller/imgen/commit/3f740ae52be6884c77f513e2172dd8964d5dc6d1)) ([`dc72e82`](https://github.com/joshuafuller/imgen/commit/dc72e829ed567cbf257add2e2b1c68588f156dd2))
+- **Skill:** The agent skill knows the worked examples, QR art, pipes and animation, and the lessons from building them. ([`687cbb8`](https://github.com/joshuafuller/imgen/commit/687cbb8f8283ce23f05ce095a4fba6b363721875))
+- **CLI:** The cost line and `--json` show the attempts when a 429 made imgen send a paid request again. ([`04eba8c`](https://github.com/joshuafuller/imgen/commit/04eba8cf3afecb0fdb5d021524884f86abd7540b))
+
+### Changed
+
+- **Providers:** A paid request is retried after a 429 only on the provider's official API, up to `IMGEN_RETRIES` attempts; a try refused with a 429 costs nothing, and custom endpoints are never retried. ([`c21c4ae`](https://github.com/joshuafuller/imgen/commit/c21c4ae0f4462d633a498603c8d4a6c7c6d2323c)) ([`4547334`](https://github.com/joshuafuller/imgen/commit/4547334ac76edba714497bfd9a123856179f5c37)) ([`02bc408`](https://github.com/joshuafuller/imgen/commit/02bc4086af1949d25388bb8006880c771db8612e)) ([`90968d6`](https://github.com/joshuafuller/imgen/commit/90968d6cc7f86a6d61d6fa71f46921673c4c3fe4)) ([`e131dd5`](https://github.com/joshuafuller/imgen/commit/e131dd5634ec0363e7e708ea0fd88e417b93eefa)) ([`ee32959`](https://github.com/joshuafuller/imgen/commit/ee32959b6f73e7d883703913e9a4dd21bcd5121f)) ([`a04c2b4`](https://github.com/joshuafuller/imgen/commit/a04c2b4c61de54dd2314ed80ea9492e3bd83e060)) ([`ea521b3`](https://github.com/joshuafuller/imgen/commit/ea521b308b410271bc5da60e180c990f252e98fc))
+- **Docs:** The README leads with why imgen exists: one safe, scriptable CLI for every image model. ([`c05ae3f`](https://github.com/joshuafuller/imgen/commit/c05ae3f20e8fe7443a86f418eb0d57c14aef1578))
+
+### Fixed
+
+- **Docs:** Sprite sheets are cut through their gaps, not at fixed offsets. ([`4a1f1cc`](https://github.com/joshuafuller/imgen/commit/4a1f1cc5976dcda879df7afdb495674c25bd000f))
+
+### Security
+
+- **Providers:** A `Retry-After` wait is at most 60 s, also for downloads and polls, and the 429 retries of one paid request wait at most 2 minutes in all. ([`c21c4ae`](https://github.com/joshuafuller/imgen/commit/c21c4ae0f4462d633a498603c8d4a6c7c6d2323c))
+- **Docs:** The security page lists the v0.5 reviews and the commit that fixed each finding. ([`84aea79`](https://github.com/joshuafuller/imgen/commit/84aea79a8ce31abeb39567ae739d2e4bd22aa342)) ([`ab68c89`](https://github.com/joshuafuller/imgen/commit/ab68c894fff91b8f6ba0754aceb39687040c8e25))
+
 ## [0.5.1] - 2026-10-15
 
 Nine new worked examples, and a money-safety rule: a request that can bill is never sent twice.
@@ -104,7 +130,8 @@ server for AI agents. Every documented example is run against the real APIs befo
 - **MCP:** Only API providers by default, with caps on images, calls, spend, disk, request size and time; provider text is returned as untrusted data. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 - **Docs:** `SECURITY.md` and `docs/security.md` describe the threat model; ten independent review reports are in `docs/security/reviews/`. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 
-[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/joshuafuller/imgen/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/joshuafuller/imgen/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/joshuafuller/imgen/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/joshuafuller/imgen/releases/tag/v0.4.0
