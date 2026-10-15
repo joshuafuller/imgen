@@ -37,7 +37,7 @@ type outcome struct {
 	text       string
 	files      []fileOut
 	elapsed    time.Duration
-	cost       float64 // the estimate times attempts
+	cost       float64 // the estimate; 0 when the official API answered every attempt with a 429
 	costKnown  bool
 	attempts   int // times the paid request was sent, when a 429 retry sent it more than once
 	isDry      bool

@@ -430,10 +430,15 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 	res, err := oc.generate(ctx, p, stop)
 	stop()
 	if err != nil {
-		oc.countAttempts(provider.AttemptsOf(err))
+		oc.noteAttempts(provider.AttemptsOf(err))
+		if provider.Unbilled(err) {
+			// The official API answered every attempt with a 429, which it
+			// does not bill: the call cost nothing.
+			oc.cost, oc.costKnown = 0, true
+		}
 		return nil, err
 	}
-	oc.countAttempts(res.Attempts)
+	oc.noteAttempts(res.Attempts)
 	oc.elapsed = env.Now().Sub(start)
 	if !oc.o.tidy {
 		reportResult(info, res, oc.req.Model, oc.elapsed)
@@ -466,15 +471,14 @@ func (oc *outcome) reserveBudget(env Env) error {
 	return nil
 }
 
-// countAttempts books every time the paid request was sent. After a 429 on
-// the provider's official API it may go out again, and each attempt counts
-// at the estimate, so the cost, the history and the budget never count too
-// few. The budget hold stays the one estimate: it is released once the
-// history entry holds the real cost.
-func (oc *outcome) countAttempts(n int) {
+// noteAttempts keeps how many times the paid request was sent, for the cost
+// line, the summary and the JSON. It changes no cost: only a 429 on the
+// provider's official API makes imgen send a paid request again, and that
+// API does not bill a 429, so the call books one estimate (or nothing, when
+// every attempt got a 429). The budget hold is that one estimate.
+func (oc *outcome) noteAttempts(n int) {
 	if n > 1 {
 		oc.attempts = n
-		oc.cost *= float64(n)
 	}
 }
 

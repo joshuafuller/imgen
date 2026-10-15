@@ -113,7 +113,7 @@ Behavior
   IMGEN_HISTORY=off          record no history
   IMGEN_HISTORY_PROMPTS=off  keep prompts out of the history and --meta
   IMGEN_MAX_PIXELS           largest image, width times height (default 40000000)
-  IMGEN_RETRIES              attempts (default 3); paid calls: 429 only, official API only, all counted
+  IMGEN_RETRIES              attempts (default 3); paid calls: 429 only, official API only, a 429 is free
   IMGEN_ALLOW_PRIVATE_URLS   1 allows -i URLs on private addresses
   IMGEN_QUIET                any value turns off the spinner
   IMGEN_PREVIEW              off, auto (default) or always: the result in the terminal
