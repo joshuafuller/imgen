@@ -24,6 +24,7 @@ var topGroups = []helpGroup{
 		{"batch", "run many jobs from a JSONL file"},
 		{"compare", "one prompt on several providers, plus a contact sheet"},
 		{"upscale", "make an image larger"},
+		{"interactive", "a terminal session: prompt, refine, pick (also imgen -i)"},
 	}},
 	{"Review", [][2]string{
 		{"history", "past runs and spend"},

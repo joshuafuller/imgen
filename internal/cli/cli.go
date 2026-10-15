@@ -19,6 +19,7 @@ import (
 	"github.com/joshuafuller/imgen/internal/enhance"
 	"github.com/joshuafuller/imgen/internal/fetch"
 	"github.com/joshuafuller/imgen/internal/imgcheck"
+	"github.com/joshuafuller/imgen/internal/interactive"
 	"github.com/joshuafuller/imgen/internal/provider"
 	"github.com/joshuafuller/imgen/internal/rules"
 	"github.com/joshuafuller/imgen/internal/subenv"
@@ -47,6 +48,10 @@ type Env struct {
 	CopyImage func(path string) error
 	Notify    func(title, body string) error
 	Enhance   func(ctx context.Context, cfg enhance.Config, prompt string) (string, error)
+
+	// Console returns the terminal for interactive mode; nil means the real
+	// TTY check (stdin and stderr). Tests give a fake terminal.
+	Console func(stdin io.Reader, stderr io.Writer) (interactive.Terminal, error)
 
 	// Styled reports whether a writer gets terminal styling; nil means
 	// term.Enabled. Tests use it to see the terminal rendering.
@@ -123,8 +128,13 @@ func Run(args []string, stdout, stderr io.Writer, env Env) int {
 	}
 	var err error
 	if len(args) == 0 {
-		writeUsage(stderr)
-		err = usagef("missing command")
+		// On a terminal a bare imgen starts a session; elsewhere it prints help.
+		if con, cerr := env.console(stderr); cerr == nil {
+			err = startSession(env, stderr, con, interactive.Settings{OutDir: "."})
+		} else {
+			writeUsage(stderr)
+			err = usagef("missing command")
+		}
 	} else {
 		err = dispatch(args, stdout, stderr, env)
 	}
@@ -142,7 +152,7 @@ func commands() map[string]handler {
 		"gen": gen(false), "edit": gen(true), "batch": runBatch, "compare": runCompare,
 		"upscale": runUpscale, "rerun": runRerun, "history": runHistory, "styles": runStyles,
 		"profiles": runProfiles, "init": runInit, "models": runModels, "providers": runProviders,
-		"doctor":     runDoctor,
+		"doctor": runDoctor, "interactive": runInteractive,
 		"completion": func(a []string, o, e io.Writer, _ Env) error { return runCompletion(a, o, e) },
 		"version": func(_ []string, o, _ io.Writer, env Env) error {
 			fmt.Fprintf(o, "imgen %s (%s, %s/%s)\n", env.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
@@ -160,6 +170,8 @@ func dispatch(args []string, stdout, stderr io.Writer, env Env) error {
 		name = "version"
 	case "-h", "--help":
 		name = "help"
+	case "-i":
+		name = "interactive"
 	}
 	h, ok := commands()[name]
 	if !ok {

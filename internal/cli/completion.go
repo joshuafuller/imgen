@@ -25,7 +25,7 @@ var (
 	aspectValues     = []string{"1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16", "21:9"}
 )
 
-var commandNames = []string{"gen", "edit", "batch", "compare", "upscale", "rerun", "history", "styles", "profiles", "init", "models", "providers", "doctor", "completion", "version", "help"}
+var commandNames = []string{"gen", "edit", "batch", "compare", "upscale", "interactive", "rerun", "history", "styles", "profiles", "init", "models", "providers", "doctor", "completion", "version", "help"}
 
 // flagWords returns every flag of the gen set as -x / --long words, sorted.
 func flagWords() []string {
