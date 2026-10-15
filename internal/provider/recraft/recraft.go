@@ -116,9 +116,9 @@ func (c *Client) apiPolicy() httpx.Policy { return c.merge(httpx.DefaultPolicy()
 // paidPolicy is apiPolicy for a request that can bill: it is sent again
 // only after a 429, and only on Recraft's own API host, whatever c.Retry
 // says. sent counts each time it is sent.
-func (c *Client) paidPolicy(sent *int) httpx.Policy {
+func (c *Client) paidPolicy(sent *httpx.Tally) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid, p.Sent = true, sent
+	p.Paid, p.Tally = true, sent
 	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
@@ -151,13 +151,13 @@ func (c *Client) ListModels(context.Context) ([]provider.Model, error) {
 // input plus a mask calls inpaint. Both are documented for V3 models only.
 // Result.Attempts, or the error, counts each time the paid request was sent.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
-	sent := 0
+	var sent httpx.Tally
 	res, err := c.generate(ctx, req, &sent)
 	return provider.Attempted(res, sent, err)
 }
 
 // generate is Generate without the count: sent counts the paid requests.
-func (c *Client) generate(ctx context.Context, req provider.Request, sent *int) (*provider.Result, error) {
+func (c *Client) generate(ctx context.Context, req provider.Request, sent *httpx.Tally) (*provider.Result, error) {
 	if req.Model != "" {
 		if err := provider.ValidModelID(req.Model); err != nil {
 			return nil, fmt.Errorf("recraft: %w", err)
@@ -257,7 +257,7 @@ func dataURL(img provider.Image) string {
 // post sends an authenticated API request and returns the 2xx body. The
 // request is sent again only after a 429 on the official API host; sent
 // counts each time it is sent.
-func (c *Client) post(ctx context.Context, hc *http.Client, pol netguard.Policy, path string, buf []byte, ctype string, sent *int) ([]byte, error) {
+func (c *Client) post(ctx context.Context, hc *http.Client, pol netguard.Policy, path string, buf []byte, ctype string, sent *httpx.Tally) ([]byte, error) {
 	target := c.base() + path
 	if u, perr := url.Parse(target); perr != nil || !pol.MayAuth(u) {
 		return nil, errNoAuth

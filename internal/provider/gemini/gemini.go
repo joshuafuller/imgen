@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -127,9 +126,9 @@ func (c *Client) retryPolicy(inline bool) httpx.Policy {
 // paidPolicy is the policy of a generateContent call, which bills: it is
 // sent again only after a 429, and only on the official API host, whatever
 // c.Retry says. sent counts each time it is sent.
-func (c *Client) paidPolicy(sent *int) httpx.Policy {
+func (c *Client) paidPolicy(sent *httpx.Tally) httpx.Policy {
 	pol := c.retryPolicy(true)
-	pol.Paid, pol.Sent = true, sent
+	pol.Paid, pol.Tally = true, sent
 	pol.Retry429 = httpx.OfficialHost(c.BaseURL, defaultHost)
 	return pol
 }
@@ -324,7 +323,7 @@ func (c *Client) Generate(ctx context.Context, r provider.Request) (*provider.Re
 	n := max(r.N, 1)
 	results := make([]*provider.Result, n)
 	errs := make([]error, n)
-	sents := make([]int, n)
+	sents := make([]httpx.Tally, n)
 	var wg sync.WaitGroup
 	for i := range n {
 		wg.Go(func() { results[i], errs[i] = c.generateOne(ctx, r.Model, body, &sents[i]) })
@@ -336,14 +335,14 @@ func (c *Client) Generate(ctx context.Context, r provider.Request) (*provider.Re
 			results[0].Images = append(results[0].Images, res.Images...)
 		}
 	}
-	// Attempts is the most sends of one request, so the estimate times
-	// Attempts never counts too few.
-	return provider.Attempted(results[0], slices.Max(sents), err)
+	// One tally for the call: the most sends of one request, rate limited
+	// only when every request was.
+	return provider.Attempted(results[0], httpx.Combine(sents...), err)
 }
 
 // generateOne runs one generateContent request; sent counts each time it is
 // sent.
-func (c *Client) generateOne(ctx context.Context, model string, body []byte, sent *int) (*provider.Result, error) {
+func (c *Client) generateOne(ctx context.Context, model string, body []byte, sent *httpx.Tally) (*provider.Result, error) {
 	u := fmt.Sprintf("%s/models/%s:generateContent", c.BaseURL, model)
 	var resp response
 	if err := c.do(ctx, http.MethodPost, u, body, &resp, c.paidPolicy(sent)); err != nil {

@@ -39,7 +39,7 @@ func (a *attemptsFake) Generate(ctx context.Context, r provider.Request) (*provi
 	if err == nil {
 		err = a.err
 	}
-	return provider.Attempted(res, a.n, err)
+	return provider.Attempted(res, httpx.Tally{Sent: a.n}, err)
 }
 
 func attemptsHarness(t *testing.T, n int, err error) *harness {

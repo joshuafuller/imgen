@@ -225,14 +225,14 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 // call is sent again, after a 429 on the official API; Result.Attempts, or
 // the error, counts each time it was sent.
 func (c *Client) generate(ctx context.Context, req provider.Request, onPartial func(provider.Image)) (*provider.Result, error) {
-	sent := 0
+	var sent httpx.Tally
 	res, err := c.run(ctx, req, onPartial, &sent)
 	return provider.Attempted(res, sent, err)
 }
 
 // run is generate without the count: sent counts the plain requests. Both
 // paths share the model checks and the alpha check.
-func (c *Client) run(ctx context.Context, req provider.Request, onPartial func(provider.Image), sent *int) (*provider.Result, error) {
+func (c *Client) run(ctx context.Context, req provider.Request, onPartial func(provider.Image), sent *httpx.Tally) (*provider.Result, error) {
 	if req.Model != "" {
 		if err := provider.ValidModelID(req.Model); err != nil {
 			return nil, fmt.Errorf("openai: %w", err)
@@ -296,7 +296,7 @@ func (c *Client) newRequest(ctx context.Context, req provider.Request) func() (*
 
 // plain runs the call without streaming and returns the images. sent
 // counts each time the request was sent.
-func (c *Client) plain(ctx context.Context, req provider.Request, sent *int) ([]provider.Image, error) {
+func (c *Client) plain(ctx context.Context, req provider.Request, sent *httpx.Tally) ([]provider.Image, error) {
 	body, err := c.do(c.newRequest(ctx, req), c.paidPolicy(sent))
 	if err != nil {
 		return nil, err
@@ -520,9 +520,9 @@ func (c *Client) retryPolicy(inline bool) httpx.Policy {
 // paidPolicy is the policy of a generate or edit call, which bills: it is
 // sent again only after a 429, and only on the official API host, whatever
 // c.Retry says. sent counts each time it is sent.
-func (c *Client) paidPolicy(sent *int) httpx.Policy {
+func (c *Client) paidPolicy(sent *httpx.Tally) httpx.Policy {
 	pol := c.retryPolicy(true)
-	pol.Paid, pol.Sent = true, sent
+	pol.Paid, pol.Tally = true, sent
 	pol.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return pol
 }

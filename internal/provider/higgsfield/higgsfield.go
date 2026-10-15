@@ -160,9 +160,9 @@ func (c *Client) apiPolicy() httpx.Policy {
 // paidPolicy is apiPolicy for a request that can bill: it is sent again
 // only after a 429, and only on Higgsfield's own API host. sent counts each
 // time it is sent.
-func (c *Client) paidPolicy(sent *int) httpx.Policy {
+func (c *Client) paidPolicy(sent *httpx.Tally) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid, p.Sent = true, sent
+	p.Paid, p.Tally = true, sent
 	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
@@ -286,15 +286,15 @@ func (c *Client) checkModel(model string) error {
 // one submit was sent: a model that makes one image per submit needs
 // several submits.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
-	most := 0
-	res, err := c.generate(ctx, req, &most)
-	return provider.Attempted(res, most, err)
+	var sents []httpx.Tally
+	res, err := c.generate(ctx, req, &sents)
+	return provider.Attempted(res, httpx.Combine(sents...), err)
 }
 
-// generate is Generate without the count: most keeps the most times one
-// submit was sent. The uploads, the polls and the downloads cannot bill and
-// are not counted.
-func (c *Client) generate(ctx context.Context, req provider.Request, most *int) (*provider.Result, error) {
+// generate is Generate without the count: sents gets the tally of each
+// submit that was sent. The uploads, the polls and the downloads cannot
+// bill and are not counted.
+func (c *Client) generate(ctx context.Context, req provider.Request, sents *[]httpx.Tally) (*provider.Result, error) {
 	model := req.Model
 	if model == "" {
 		model = defaultModel
@@ -338,9 +338,9 @@ func (c *Client) generate(ctx context.Context, req provider.Request, most *int) 
 				delete(body, "batch_size")
 			}
 		}
-		var sent int // each submit has its own count
+		var sent httpx.Tally // each submit has its own tally
 		imgs, err := c.run(ctx, model, body, &sent)
-		*most = max(*most, sent)
+		*sents = append(*sents, sent)
 		if err != nil {
 			return nil, err
 		}
@@ -425,7 +425,7 @@ type status struct {
 
 // run submits one generation, waits for it, and downloads its images. sent
 // counts each time the submit was sent.
-func (c *Client) run(ctx context.Context, model string, body map[string]any, sent *int) ([]provider.Image, error) {
+func (c *Client) run(ctx context.Context, model string, body map[string]any, sent *httpx.Tally) ([]provider.Image, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, err

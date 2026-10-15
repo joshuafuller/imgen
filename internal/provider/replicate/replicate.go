@@ -130,9 +130,9 @@ func (c *Client) apiPolicy() httpx.Policy {
 // paidPolicy is apiPolicy for a request that can bill: it is sent again
 // only after a 429, and only on Replicate's own API host. sent counts each
 // time it is sent.
-func (c *Client) paidPolicy(sent *int) httpx.Policy {
+func (c *Client) paidPolicy(sent *httpx.Tally) httpx.Policy {
 	p := c.apiPolicy()
-	p.Paid, p.Sent = true, sent
+	p.Paid, p.Tally = true, sent
 	p.Retry429 = httpx.OfficialHost(c.base(), defaultHost)
 	return p
 }
@@ -202,13 +202,13 @@ type prediction struct {
 // Generate runs the model in req.Model and downloads its output files.
 // Result.Attempts, or the error, counts each time the create was sent.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
-	sent := 0
+	var sent httpx.Tally
 	res, err := c.generate(ctx, req, &sent)
 	return provider.Attempted(res, sent, err)
 }
 
 // generate is Generate without the count: sent counts the creates.
-func (c *Client) generate(ctx context.Context, req provider.Request, sent *int) (*provider.Result, error) {
+func (c *Client) generate(ctx context.Context, req provider.Request, sent *httpx.Tally) (*provider.Result, error) {
 	if err := provider.ValidModelID(req.Model); err != nil {
 		return nil, fmt.Errorf("replicate: %w", err)
 	}

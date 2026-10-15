@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joshuafuller/imgen/internal/httpx"
 )
 
 var errUnknownType = errors.New("unknown provider type")
@@ -105,17 +107,18 @@ func (e *AttemptsError) Error() string { return e.Err.Error() }
 
 func (e *AttemptsError) Unwrap() error { return e.Err }
 
-// Attempted is the return of a backend's Generate: res with Attempts set to
-// n, or err wrapped in an AttemptsError when n is above 1.
-func Attempted(res *Result, n int, err error) (*Result, error) {
+// Attempted is the return of a backend's Generate, from the tally of its
+// paid requests (httpx.Combine for several): res with Attempts set to
+// t.Sent, or err wrapped in an AttemptsError when t.Sent is above 1.
+func Attempted(res *Result, t httpx.Tally, err error) (*Result, error) {
 	if err != nil {
-		if n > 1 {
-			err = &AttemptsError{Attempts: n, Err: err}
+		if t.Sent > 1 {
+			err = &AttemptsError{Attempts: t.Sent, Err: err}
 		}
 		return nil, err
 	}
 	if res != nil {
-		res.Attempts = n
+		res.Attempts = t.Sent
 	}
 	return res, nil
 }

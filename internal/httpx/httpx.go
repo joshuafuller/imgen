@@ -30,10 +30,32 @@ type Policy struct {
 	// to the provider's official API host (see OfficialHost): that API does
 	// not bill a 429. A custom endpoint is never retried.
 	Retry429 bool
-	// Sent, when set, counts every request sent under the policy, so the
-	// caller can count each attempt of a paid request in the cost. Use one
-	// counter per request: it is not safe for concurrent use.
-	Sent *int
+	// Tally, when set, records the sends of the request (see Tally). Use one
+	// tally per request: it is not safe for concurrent use.
+	Tally *Tally
+}
+
+// Tally records how one request went, so the caller can show the attempts
+// and book the cost of a paid request.
+type Tally struct {
+	// Sent counts every time the request was sent.
+	Sent int
+	// RateLimited is true when the final response was a 429 to a paid
+	// request with Retry429: the provider's official API refused it, and
+	// that API does not bill a 429.
+	RateLimited bool
+}
+
+// Combine folds the tallies of the paid requests of one call, such as one
+// request per image: Sent is the most sends of one request, and the call is
+// RateLimited only when every request was.
+func Combine(ts ...Tally) Tally {
+	var out Tally
+	for i, t := range ts {
+		out.Sent = max(out.Sent, t.Sent)
+		out.RateLimited = t.RateLimited && (i == 0 || out.RateLimited)
+	}
+	return out
 }
 
 const (
@@ -112,8 +134,9 @@ func ImagePolicy() Policy {
 // it returns, so not even a 429 proves that it did not run and bill the
 // request. Set Retry429 for the provider's official API host, which does
 // not bill a 429: a 429, and only a 429, is then sent again, up to the
-// Attempts of DefaultPolicy (IMGEN_RETRIES), and the caller counts each
-// attempt in the cost (Sent). A network error ends with PaidHint; SendHint
+// Attempts of DefaultPolicy (IMGEN_RETRIES). The Tally tells the caller how
+// many times it was sent, and whether the final response was such a 429,
+// which costs nothing. A network error ends with PaidHint; SendHint
 // returns the hint for a status error.
 func PaidPolicy() Policy {
 	p := DefaultPolicy()
@@ -165,6 +188,7 @@ func SendHint(c *http.Client, newReq func() (*http.Request, error), p Policy) (i
 		}
 		p.count()
 		status, body, ra, err := once(c, req, p.MaxBytes)
+		p.mark(err == nil && status == http.StatusTooManyRequests)
 		if errors.Is(err, ErrTooLarge) {
 			return status, nil, "", err
 		}
@@ -188,10 +212,19 @@ func SendHint(c *http.Client, newReq func() (*http.Request, error), p Policy) (i
 	}
 }
 
-// count adds one sent request to p.Sent.
+// count adds one sent request to p.Tally.
 func (p Policy) count() {
-	if p.Sent != nil {
-		*p.Sent++
+	if p.Tally != nil {
+		p.Tally.Sent++
+	}
+}
+
+// mark records in p.Tally whether the latest response was a 429 that the
+// provider's official API does not bill: rateLimited, for a paid request
+// with Retry429.
+func (p Policy) mark(rateLimited bool) {
+	if p.Tally != nil {
+		p.Tally.RateLimited = rateLimited && p.Paid && p.Retry429
 	}
 }
 
