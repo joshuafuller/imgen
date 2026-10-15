@@ -8,6 +8,12 @@ Every entry links to the commit that made the change.
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-15
+
+Real pixel art from any model with `--pixel` and `--palette`, a magenta background screen by default, an images-only walk cycle example, and Gemini thinking tokens priced as Google bills them.
+
+**Full changelog:** [v0.5.3...v0.5.4](https://github.com/joshuafuller/imgen/compare/v0.5.3...v0.5.4)
+
 ### Upgrade notes
 
 - **CLI:** A bare `--remove-bg` now asks for magenta, not green, also when `imgen rerun` repeats an older call. For pink, purple or magenta subjects, use `--remove-bg=green`. ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
@@ -15,7 +21,7 @@ Every entry links to the commit that made the change.
 ### Added
 
 - **CLI:** `--pixel H` turns any image into real pixel art H pixels tall, in 24 colors (`--colors`) or the colors of an image (`--palette`). ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
-- **Docs:** An images-only walk cycle: one hero, one turnaround, one pose per call, and `frames.py` to line the frames up. ([`9509ce1`](https://github.com/joshuafuller/imgen/commit/9509ce170b1bf406983312b1e0d378bccd30794d))
+- **Docs:** An images-only walk cycle: one hero, one turnaround, one batch of poses, and `frames.py` to line the frames up. ([`9509ce1`](https://github.com/joshuafuller/imgen/commit/9509ce170b1bf406983312b1e0d378bccd30794d)) ([`0809b33`](https://github.com/joshuafuller/imgen/commit/0809b33c9e8e6c3bf32ce030f022830a514e5b89))
 
 ### Changed
 
@@ -172,7 +178,8 @@ server for AI agents. Every documented example is run against the real APIs befo
 - **MCP:** Only API providers by default, with caps on images, calls, spend, disk, request size and time; provider text is returned as untrusted data. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 - **Docs:** `SECURITY.md` and `docs/security.md` describe the threat model; ten independent review reports are in `docs/security/reviews/`. ([`9b2bf44`](https://github.com/joshuafuller/imgen/commit/9b2bf44d389a7cd6c165815fb9e8c72a1f3b8036))
 
-[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/joshuafuller/imgen/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/joshuafuller/imgen/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/joshuafuller/imgen/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/joshuafuller/imgen/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/joshuafuller/imgen/compare/v0.5.0...v0.5.1
