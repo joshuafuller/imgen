@@ -1,6 +1,6 @@
 # Recipes
 
-Worked examples for common jobs: icons with real transparency, product restaging, logo variants, labeled diagrams, ultrawide wallpapers, batches and provider comparisons. Change the prompts freely and keep the flags. Every flag is explained in the [CLI reference](cli.md), and provider limits are in [Providers](providers.md).
+Worked examples for common jobs: icons with real transparency, product restaging, logo variants, labeled diagrams, ultrawide wallpapers, batches and provider comparisons. Change the prompts freely and keep the flags. Every flag is explained in the [CLI reference](cli.md), and provider limits are in [Providers](providers.md). For complete projects with scripts and sample outputs (app icons, brand kit, social cards, product listings, game assets and more), see the [examples](../examples/README.md).
 
 ## App icon with real transparency
 
@@ -100,7 +100,7 @@ imgen gen -p openai -r 1024x1024 -b transparent -f png --name sheet \
   "a 4x4 grid of 16 flat game item icons (sword, shield, potion, ...) floating on a fully transparent background, no cell backgrounds, no borders, even spacing, no text"
 ```
 
-Crop the cells in code at fixed offsets.
+Cut the sheet in code through the clear gaps between icons, not at fixed offsets: the cells drift (in one sheet the row cuts fell at y=263, 513 and 752, not 256, 512 and 768). [`examples/game-assets/`](../examples/game-assets/) has a slicer that does this, cleans the alpha haze first, and builds an atlas.
 
 ## Labeled diagrams and slides (plate + overlay)
 
