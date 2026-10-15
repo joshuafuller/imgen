@@ -92,14 +92,23 @@ type fakeRunner struct {
 	err   error
 	cost  float64
 	seq   int
+	// partials are sent to the session before the result when it streams.
+	partials  []string
+	streaming []bool // per call: whether the session asked for partials
 }
 
-func (f *fakeRunner) run(ctx context.Context, args []string, prompt string) (Result, error) {
+func (f *fakeRunner) run(ctx context.Context, args []string, prompt string, onPartial func([]byte)) (Result, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, call{slices.Clone(args), prompt})
+	f.streaming = append(f.streaming, onPartial != nil)
 	f.seq++
 	seq := f.seq
 	f.mu.Unlock()
+	if onPartial != nil {
+		for _, p := range f.partials {
+			onPartial([]byte(p))
+		}
+	}
 	if f.block {
 		<-ctx.Done()
 		return Result{}, ctx.Err()
@@ -364,7 +373,7 @@ func TestTerminalRestoredOnPanic(t *testing.T) {
 
 func TestRunnerPanicIsAnError(t *testing.T) {
 	r := newRig(t)
-	r.cfg.Run = func(context.Context, []string, string) (Result, error) { panic("plugin blew up") }
+	r.cfg.Run = func(context.Context, []string, string, func([]byte)) (Result, error) { panic("plugin blew up") }
 	r.mustRun(t, "fox\r/quit\r")
 	if !strings.Contains(r.out.String(), "plugin blew up") {
 		t.Fatalf("panic not reported:\n%s", r.out.String())

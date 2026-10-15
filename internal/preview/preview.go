@@ -265,6 +265,12 @@ func toPNG(data []byte) ([]byte, error) {
 }
 
 func writeKitty(w io.Writer, data []byte) error {
+	_, err := io.WriteString(w, kittyEscape(data, "a=T,f=100")+"\n")
+	return err
+}
+
+// kittyEscape is the kitty graphics command keys with the PNG data, in chunks.
+func kittyEscape(data []byte, keys string) string {
 	enc := base64.StdEncoding.EncodeToString(data)
 	var b strings.Builder
 	for i := 0; i == 0 || i < len(enc); i += kittyChunk {
@@ -274,14 +280,12 @@ func writeKitty(w io.Writer, data []byte) error {
 			more = 1
 		}
 		if i == 0 {
-			fmt.Fprintf(&b, "\x1b_Ga=T,f=100,m=%d;", more)
+			fmt.Fprintf(&b, "\x1b_G%s,m=%d;", keys, more)
 		} else {
 			fmt.Fprintf(&b, "\x1b_Gm=%d;", more)
 		}
 		b.WriteString(enc[i:end])
 		b.WriteString("\x1b\\")
 	}
-	b.WriteString("\n")
-	_, err := io.WriteString(w, b.String())
-	return err
+	return b.String()
 }

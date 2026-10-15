@@ -49,6 +49,14 @@ type Env struct {
 	Notify    func(title, body string) error
 	Enhance   func(ctx context.Context, cfg enhance.Config, prompt string) (string, error)
 
+	// Live returns the in-place picture for streamed partial images on w, or
+	// nil when w cannot show one; nil means preview.NewLive.
+	Live func(w io.Writer) interactive.Live
+	// Partial, when set, receives the partial images of every streaming
+	// gen or edit call, whatever the preview settings. The interactive
+	// session sets it on its own calls (which run with --json --quiet).
+	Partial func(provider.Image)
+
 	// Console returns the terminal for interactive mode; nil means the real
 	// TTY check (stdin and stderr). Tests give a fake terminal.
 	Console func(stdin io.Reader, stderr io.Writer) (interactive.Terminal, error)

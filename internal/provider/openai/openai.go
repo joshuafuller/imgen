@@ -66,6 +66,9 @@ type Client struct {
 	// explicitly is never replaced.
 	DefaultModel     string
 	TransparentModel string
+	// NoStream makes GenerateStream a plain Generate. The factory sets it for
+	// a configured base URL: local servers may not speak server-sent events.
+	NoStream bool
 
 	mu     sync.Mutex
 	cached *http.Client
@@ -81,6 +84,7 @@ func init() {
 		if cfg.BaseURL != "" {
 			c.BaseURL = cfg.BaseURL
 			c.AllModels = true
+			c.NoStream = true
 		}
 		env := cfg.APIKeyEnv
 		if env == "" && cfg.BaseURL == "" {
@@ -193,17 +197,58 @@ func (c *Client) base() string {
 
 // Generate creates images, or edits them when req.Inputs is set.
 func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.Result, error) {
+	return c.generate(ctx, req, nil)
+}
+
+// generate is Generate, streamed when onPartial is set and the request can
+// stream. Both paths share the model checks and the alpha check.
+func (c *Client) generate(ctx context.Context, req provider.Request, onPartial func(provider.Image)) (*provider.Result, error) {
 	if req.Model != "" {
 		if err := provider.ValidModelID(req.Model); err != nil {
 			return nil, fmt.Errorf("openai: %w", err)
 		}
 	}
 	transparent := req.Background == "transparent"
-	if transparent && c.TransparentModel != "" && req.Model == c.DefaultModel {
+	req = c.effective(req)
+	var (
+		imgs     []provider.Image
+		err      error
+		fallback = true
+	)
+	if onPartial != nil && c.canStream(req) {
+		imgs, fallback, err = c.stream(ctx, req, onPartial)
+	}
+	if fallback {
+		imgs, err = c.plain(ctx, req)
+	}
+	if err != nil {
+		if transparent && strings.Contains(strings.ToLower(err.Error()), "transparent") {
+			return nil, fmt.Errorf("%w. %s", err, c.alphaHint())
+		}
+		return nil, err
+	}
+	res := &provider.Result{Model: req.Model, Images: imgs}
+	if transparent {
+		if err := c.checkAlpha(req.Model, res.Images); err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+// effective is req with the instance's model choice applied: a transparent
+// background on the default model uses TransparentModel.
+func (c *Client) effective(req provider.Request) provider.Request {
+	if req.Background == "transparent" && c.TransparentModel != "" && req.Model == c.DefaultModel {
 		req.Model = c.TransparentModel
 	}
-	// req.Seed is not sent: the Images API has no seed parameter.
-	newReq := func() (*http.Request, error) {
+	return req
+}
+
+// newRequest returns the request builder for a generate or edit call.
+// req.Seed is not sent: the Images API has no seed parameter.
+func (c *Client) newRequest(ctx context.Context, req provider.Request) func() (*http.Request, error) {
+	return func() (*http.Request, error) {
 		var (
 			r   *http.Request
 			err error
@@ -219,29 +264,26 @@ func (c *Client) Generate(ctx context.Context, req provider.Request) (*provider.
 		c.auth(r)
 		return r, nil
 	}
-	body, err := c.do(newReq, true)
+}
+
+// plain runs the call without streaming and returns the images.
+func (c *Client) plain(ctx context.Context, req provider.Request) ([]provider.Image, error) {
+	body, err := c.do(c.newRequest(ctx, req), true)
 	if err != nil {
-		if transparent && strings.Contains(strings.ToLower(err.Error()), "transparent") {
-			return nil, fmt.Errorf("%w. %s", err, c.alphaHint())
-		}
 		return nil, err
 	}
+	return c.parseImages(ctx, body, mimeFor(req.Format))
+}
+
+// parseImages reads an ImagesResponse body.
+func (c *Client) parseImages(ctx context.Context, body []byte, mime string) ([]provider.Image, error) {
 	var parsed struct {
 		Data []respImage `json:"data"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return nil, fmt.Errorf("openai: decode response: %w", err)
 	}
-	res := &provider.Result{Model: req.Model}
-	if res.Images, err = c.collect(ctx, parsed.Data, mimeFor(req.Format)); err != nil {
-		return nil, err
-	}
-	if transparent {
-		if err := c.checkAlpha(req.Model, res.Images); err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
+	return c.collect(ctx, parsed.Data, mime)
 }
 
 type respImage struct {
@@ -431,9 +473,9 @@ func stringify(v any) string {
 	}
 }
 
-// send runs newReq with retries and returns the status code and full body.
-// inline marks responses that carry b64_json image data and so need the larger body cap.
-func (c *Client) send(newReq func() (*http.Request, error), inline bool) (int, []byte, error) {
+// retryPolicy is c.Retry, else httpx.DefaultPolicy. inline marks responses
+// that carry b64_json image data and so need the larger body cap.
+func (c *Client) retryPolicy(inline bool) httpx.Policy {
 	pol := c.Retry
 	if pol.Attempts == 0 {
 		pol = httpx.DefaultPolicy()
@@ -443,7 +485,12 @@ func (c *Client) send(newReq func() (*http.Request, error), inline bool) (int, [
 	} else if inline && pol.MaxBytes <= 0 {
 		pol.MaxBytes = httpx.ImagePolicy().MaxBytes
 	}
-	status, body, err := httpx.Send(c.httpc(), newReq, pol)
+	return pol
+}
+
+// send runs newReq with retries and returns the status code and full body.
+func (c *Client) send(newReq func() (*http.Request, error), inline bool) (int, []byte, error) {
+	status, body, err := httpx.Send(c.httpc(), newReq, c.retryPolicy(inline))
 	if err != nil {
 		return 0, nil, fmt.Errorf("openai: request: %w", err)
 	}
@@ -456,17 +503,22 @@ func (c *Client) do(newReq func() (*http.Request, error), inline bool) ([]byte, 
 		return nil, err
 	}
 	if status < 200 || status > 299 {
-		var e struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(body, &e) == nil && e.Error.Message != "" {
-			return nil, fmt.Errorf("%w: %s (HTTP %d)", errAPI, e.Error.Message, status)
-		}
-		return nil, fmt.Errorf("%w %d: %s", errHTTPStatus, status, strings.TrimSpace(string(body)))
+		return nil, statusError(status, body)
 	}
 	return body, nil
+}
+
+// statusError is the API's error message, else the status and body.
+func statusError(status int, body []byte) error {
+	var e struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &e) == nil && e.Error.Message != "" {
+		return fmt.Errorf("%w: %s (HTTP %d)", errAPI, e.Error.Message, status)
+	}
+	return fmt.Errorf("%w %d: %s", errHTTPStatus, status, strings.TrimSpace(string(body)))
 }
 
 // download fetches a server-supplied image URL without credentials. The URL

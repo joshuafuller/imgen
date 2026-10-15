@@ -116,6 +116,7 @@ Behavior
   IMGEN_ALLOW_PRIVATE_URLS   1 allows -i URLs on private addresses
   IMGEN_QUIET                any value turns off the spinner
   IMGEN_PREVIEW              off, auto (default) or always: the result in the terminal
+  IMGEN_STREAM=off           no live partial pictures while an image renders
   GEMINI_BASE_URL            endpoint of the built-in gemini instance
   OPENAI_BASE_URL            endpoint of the built-in openai instance
   NO_COLOR                   plain output on a terminal
@@ -176,6 +177,7 @@ func genFlagHelp(cmd string) []helpGroup {
 			{"--open", "open the result in the default viewer"},
 			{"--preview", "show the result in the terminal, as half blocks if it has no graphics"},
 			{"--no-preview", "never show the result in the terminal (default: inline on kitty, iTerm2, sixel)"},
+			{"--no-stream", "no live partial pictures in gen or edit (default: on with the preview, openai)"},
 			{"--copy", "copy the first result to the clipboard"},
 			{"--notify", "send a desktop notice when done"},
 		}},

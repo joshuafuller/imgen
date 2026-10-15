@@ -90,6 +90,7 @@ type genOpts struct {
 	styles                                                      listFlag
 	last, open, preview, copy, quiet, notify, noEmbed, useCache bool
 	noPreview, autoPreview                                      bool // autoPreview is set by setPreview
+	noStream, stream                                            bool // stream is set by runGen
 	embedPrompt                                                 bool
 	enhance, force, grid                                        bool
 	tidy                                                        bool   // one summary line on a terminal instead of the info lines
@@ -134,6 +135,7 @@ func registerExtraFlags(fs *flag.FlagSet, o *genOpts) {
 	fs.BoolVar(&o.open, "open", false, "open the result in the default viewer")
 	fs.BoolVar(&o.preview, "preview", false, "show the result in the terminal, as half blocks if it has no graphics")
 	fs.BoolVar(&o.noPreview, "no-preview", false, "never show the result in the terminal")
+	fs.BoolVar(&o.noStream, "no-stream", false, "no live partial pictures while the image renders")
 	fs.BoolVar(&o.copy, "copy", false, "copy the first result to the clipboard")
 	fs.BoolVar(&o.quiet, "quiet", false, "no info lines on stderr and no spinner (errors still print)")
 	fs.BoolVar(&o.notify, "notify", false, "send a desktop notice when done")
@@ -285,7 +287,7 @@ func execute(ctx context.Context, env Env, o *genOpts, pos []string, edit bool, 
 		oc.req.Prompt += " " + post.ChromaPrompt
 	}
 	if o.dryRun {
-		return oc.dryRun(), nil
+		return oc.dryRun(env, info), nil
 	}
 	err = oc.run(ctx, env, info)
 	rerr := oc.record(env, edit, pos, err)
@@ -351,7 +353,7 @@ func flagSet(fs *flag.FlagSet, name string) bool {
 	return set
 }
 
-func (oc *outcome) dryRun() *outcome {
+func (oc *outcome) dryRun(env Env, info io.Writer) *outcome {
 	oc.isDry = true
 	oc.req.Model = oc.o.model
 	if oc.req.Model == "" {
@@ -360,13 +362,19 @@ func (oc *outcome) dryRun() *outcome {
 	if oc.req.Model == "latest" {
 		oc.req.Model = unresolved
 	}
+	oc.plan = oc.dryPlan(env, info)
 	oc.estimate()
 	return oc
 }
 
+// estimate prices the call, plus the partial images it will stream.
 func (oc *outcome) estimate() {
 	n := max(oc.req.N, 1)
 	oc.cost, oc.costKnown = pricing.Estimate(oc.cfg.Type, oc.req.Model, oc.req.Size, oc.req.Quality, n)
+	if oc.plan.partials > 0 && oc.costKnown {
+		extra, _ := pricing.Partials(oc.cfg.Type, oc.req.Model, oc.plan.partials) // planStream checked it
+		oc.cost += extra
+	}
 }
 
 func (oc *outcome) run(ctx context.Context, env Env, info io.Writer) error {
@@ -409,6 +417,7 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 			return imgs, nil
 		}
 	}
+	oc.plan = oc.planStream(env, p, info)
 	oc.estimate()
 	if err := oc.reserveBudget(env); err != nil {
 		return nil, err
@@ -416,7 +425,7 @@ func (oc *outcome) images(ctx context.Context, env Env, p provider.Provider, inf
 	oc.dispatched = true
 	stop := progress.Start(info, "generating")
 	start := env.Now()
-	res, err := p.Generate(ctx, oc.req)
+	res, err := oc.generate(ctx, p, stop)
 	stop()
 	if err != nil {
 		return nil, err
@@ -548,6 +557,7 @@ func runGen(args []string, stdout, stderr io.Writer, env Env, edit bool) error {
 		return err
 	}
 	setPreview(env, o, stderr)
+	setStream(o)
 	o.histArgs = sanitizeArgs(env, args)
 	info := stderr
 	if o.quiet {

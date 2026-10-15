@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joshuafuller/imgen/internal/interactive"
+	"github.com/joshuafuller/imgen/internal/provider"
 )
 
 const interactiveHelp = `usage: imgen interactive [flags]   (also: imgen -i, or a bare imgen on a terminal)
@@ -42,6 +43,7 @@ func runInteractive(args []string, _, stderr io.Writer, env Env) error {
 	fs.StringVar(&st.Style, "style", "", "named style")
 	fs.StringVar(&st.Profile, "profile", "", "flag profile")
 	fs.StringVar(&st.OutDir, "o", ".", "output directory")
+	fs.BoolVar(&st.NoStream, "no-stream", false, "no live partial pictures while an image renders")
 	pos, err := parseCmd(fs, args, stderr, interactiveHelp)
 	if err != nil {
 		return err
@@ -64,6 +66,7 @@ func startSession(env Env, stderr io.Writer, con interactive.Terminal, st intera
 	if st.OutDir == "" {
 		st.OutDir = "."
 	}
+	st.NoStream = st.NoStream || env.streamOff()
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(sigs)
@@ -71,7 +74,7 @@ func startSession(env Env, stderr io.Writer, con interactive.Terminal, st intera
 		In: env.Stdin, Out: stderr, Term: con, Run: sessionRunner(env), Settings: st, Signals: sigs,
 		Providers: env.Rules.Names(), Styles: env.Rules.StyleNames(), Profiles: env.Rules.ProfileNames(),
 		Budget: env.getenv("IMGEN_BUDGET"), Styled: env.style(stderr).On,
-		Inline: env.inline, Open: env.openFile, Copy: env.copyImage,
+		Inline: env.inline, Live: env.live, Open: env.openFile, Copy: env.copyImage,
 	})
 	if errors.Is(err, interactive.ErrSignal) {
 		return nil
@@ -81,13 +84,18 @@ func startSession(env Env, stderr io.Writer, con interactive.Terminal, st intera
 
 // sessionRunner runs each session call as "imgen gen|edit ... --json -" with
 // the prompt on stdin, the same path as the CLI and the MCP server, so the
-// budget, cache, history, redaction and image checks all apply.
+// budget, cache, history, redaction and image checks all apply. Partial
+// images of a streamed call go to onPartial.
 func sessionRunner(env Env) interactive.Runner {
-	return func(ctx context.Context, args []string, prompt string) (interactive.Result, error) {
+	return func(ctx context.Context, args []string, prompt string, onPartial func([]byte)) (interactive.Result, error) {
 		var out, errb bytes.Buffer
 		e := env
 		e.Ctx = ctx
 		e.Stdin = strings.NewReader(prompt)
+		e.Partial = nil
+		if onPartial != nil {
+			e.Partial = func(img provider.Image) { onPartial(img.Data) }
+		}
 		full := append(append([]string{}, args...), "--json", "--quiet", "-")
 		code := Run(full, &out, &errb, e)
 		var r struct {

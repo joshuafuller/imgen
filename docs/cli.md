@@ -80,6 +80,7 @@ The prompt can be words, `-P file`, or `-` to read stdin. Flags may come before 
 | `--open` | Open the result in the default viewer. |
 | `--preview` | Show every result in the terminal: inline with kitty, iTerm2 or sixel graphics, else as Unicode half blocks. See [Pictures in the terminal](#pictures-in-the-terminal). |
 | `--no-preview` | Never show the result in the terminal. |
+| `--no-stream` | Do not show live partial pictures while the image renders. See [Pictures in the terminal](#pictures-in-the-terminal). |
 | `--copy` | Copy the first result to the clipboard. |
 | `--notify` | Send a desktop notice when done. |
 | `--quiet` | No info lines on stderr and no spinner. Errors still print. |
@@ -180,10 +181,20 @@ Inside tmux or screen there are no inline pictures (use `--preview` for half blo
 
 Nothing is shown with `--json`, `--quiet` or `-o -`, when stderr is not a terminal, or in the MCP server. An SVG, or an image over the pixel limits, is not shown.
 
+### Live partial pictures
+
+With OpenAI, `gen` and `edit` show the picture while it renders, when the result will show inline (kitty, iTerm2 or sixel graphics). imgen asks the API for two rough partial images. It draws each one in the same place, then the final image. Interactive mode does the same, above its spinner. The partial images are only for the display: imgen does not save them, and each one gets the size and pixel checks before it is drawn. The final image goes through the usual checks, post-processing, history and save.
+
+OpenAI bills each partial image as 100 extra image output tokens. For `gpt-image-2` this is about $0.003 for each partial image, at the image output rate in the price table. The cost line, the history and `IMGEN_BUDGET` include this cost when the call streams.
+
+- `--no-stream` turns it off for one call. `IMGEN_STREAM=off` turns it off for all calls and sessions.
+- imgen does not stream with `-n` above 1, with DALL-E models, with a custom `base_url`, in `batch` and `compare`, or in the MCP server.
+- If the stream cannot start, imgen makes the normal call. If OpenAI refuses to stream (for example, the organization is not verified), imgen does not ask again until the process ends.
+
 ## interactive
 
 ```sh
-imgen interactive [-p NAME] [-m ID] [-a R] [-r R] [-n N] [--style NAME] [--profile NAME] [-o DIR]
+imgen interactive [-p NAME] [-m ID] [-a R] [-r R] [-n N] [--style NAME] [--profile NAME] [-o DIR] [--no-stream]
 imgen -i [flags]
 imgen
 ```
@@ -382,6 +393,7 @@ On an error, stdout gets `{"ok":false,"error":"...","exit":1}` (plus `line` in `
 | `IMGEN_ALLOW_PRIVATE_URLS` | `1` allows `-i` URLs on private or loopback addresses. See [Security](security.md). |
 | `IMGEN_QUIET` | Any value turns off the progress spinner. |
 | `IMGEN_PREVIEW` | `off`, `auto` (default) or `always`: pictures in the terminal. See [Pictures in the terminal](#pictures-in-the-terminal). |
+| `IMGEN_STREAM` | `off` turns off the live partial pictures in `gen`, `edit` and interactive mode. See [Live partial pictures](#live-partial-pictures). |
 | `COLORTERM` | `truecolor` or `24bit` gives half-block pictures 24-bit color. |
 | `NO_COLOR` | Any value turns off terminal colors. `TERM=dumb` does the same. |
 | `XDG_STATE_HOME`, `XDG_CACHE_HOME` | Move the history and cache folders. |

@@ -38,14 +38,23 @@ type Result struct {
 }
 
 // Runner runs one CLI command (args such as ["gen", "-p", "gemini"]) with
-// the prompt. Cancelling ctx cancels the call.
-type Runner func(ctx context.Context, args []string, prompt string) (Result, error)
+// the prompt. Cancelling ctx cancels the call. When onPartial is set and
+// the backend streams, each partial image goes to it while the call runs.
+type Runner func(ctx context.Context, args []string, prompt string, onPartial func([]byte)) (Result, error)
+
+// Live redraws the partial pictures of a streamed call in one place
+// (preview.Live): Done erases the last one and rewinds the cursor.
+type Live interface {
+	Draw(data []byte) error
+	Done()
+}
 
 // Settings are the values every call uses. Empty means the CLI default.
 type Settings struct {
 	Provider, Model, Aspect, Res, Style, Profile string
 	N                                            int
 	OutDir                                       string
+	NoStream                                     bool // no live partial pictures
 }
 
 // Config is everything a session needs from the outside.
@@ -61,6 +70,9 @@ type Config struct {
 	Budget                      string   // IMGEN_BUDGET, shown in /settings
 
 	Inline func(w io.Writer, path string) (bool, error)
+	// Live returns the in-place picture for partial images, or nil when the
+	// terminal has no graphics. Nil means no streaming.
+	Live   func(w io.Writer) Live
 	Open   func(path string) error
 	Copy   func(path string) error
 	Styled bool // use terminal colors

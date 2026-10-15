@@ -21,6 +21,9 @@ type entry struct {
 	BySize        map[string]float64 `json:"by_size"`
 	ByQuality     map[string]float64 `json:"by_quality"`
 	ByQualitySize map[string]float64 `json:"by_quality_size"`
+	// ImageOutputPerMTok is the USD rate per 1M image output tokens, for
+	// costs billed in tokens on top of the per-image price.
+	ImageOutputPerMTok float64 `json:"image_output_per_mtok"`
 }
 
 type table struct {
@@ -37,6 +40,28 @@ func Estimate(providerType, model, size, quality string, n int) (usd float64, ok
 		n = 1
 	}
 	return e.unit(size, quality) * float64(n), true
+}
+
+// PartialImageTokens is what one streamed partial image costs in image
+// output tokens (OpenAI image generation guide).
+const PartialImageTokens = 100
+
+// Partials returns the extra USD cost of n streamed partial images at the
+// model's image output rate: the most specific entry that has a rate, so an
+// override of the per-image price keeps the built-in rate. ok=false when no
+// entry has one.
+func Partials(providerType, model string, n int) (usd float64, ok bool) {
+	var rated []entry
+	for _, e := range load() {
+		if e.ImageOutputPerMTok > 0 {
+			rated = append(rated, e)
+		}
+	}
+	e := match(rated, providerType, model)
+	if e == nil {
+		return 0, false
+	}
+	return float64(n*PartialImageTokens) * e.ImageOutputPerMTok / 1e6, true
 }
 
 func (e *entry) unit(size, quality string) float64 {

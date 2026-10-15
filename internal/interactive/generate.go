@@ -26,18 +26,36 @@ type runOut struct {
 
 // generate runs one call with a spinner. Ctrl-C (or an interrupt) cancels
 // the call; other keys typed meanwhile are kept for the next prompt. A
-// terminate signal cancels the call and ends the session.
+// terminate signal cancels the call and ends the session. On a terminal
+// with graphics, streamed partial images are drawn in place above the
+// spinner by this loop, so only one goroutine writes to the terminal.
 func (s *session) generate(ctx context.Context, args []string, prompt string) (Result, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := make(chan runOut, 1)
+	var (
+		live      Live
+		partials  chan []byte // nil (never ready) when not streaming
+		onPartial func([]byte)
+	)
+	if s.cfg.Live != nil && !s.set.NoStream {
+		if live = s.cfg.Live(s.out); live != nil {
+			partials = make(chan []byte)
+			onPartial = func(b []byte) {
+				select {
+				case partials <- b:
+				case <-ctx.Done():
+				}
+			}
+		}
+	}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				done <- runOut{err: fmt.Errorf("internal error: %v", r)}
 			}
 		}()
-		res, err := s.cfg.Run(ctx, args, prompt)
+		res, err := s.cfg.Run(ctx, args, prompt, onPartial)
 		done <- runOut{res, err}
 	}()
 	fmt.Fprint(s.out, "\x1b[?25l")
@@ -51,7 +69,14 @@ func (s *session) generate(ctx context.Context, args []string, prompt string) (R
 	for {
 		select {
 		case o := <-done:
+			if live != nil {
+				live.Done()
+			}
 			return o.res, o.err
+		case b := <-partials:
+			fmt.Fprint(s.out, "\r\x1b[2K")
+			_ = live.Draw(b) // display only: a frame that fails is skipped
+			s.spin(frame, start)
 		case <-t.C:
 			frame++
 			s.spin(frame, start)
