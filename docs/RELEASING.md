@@ -43,7 +43,7 @@ scripts/smoke-docs.sh --live --estimate  # live: list every example and price it
 scripts/smoke-docs.sh --live             # live: run them against the real APIs
 ```
 
-- Live cost: about $4 with the current docs. A command shape that occurs on several pages runs once. The script stops before any paid call if the estimate is over $6 (`--max-usd N` changes the cap), and sets `IMGEN_BUDGET` to the same cap. Live runs Gemini, OpenAI and Codex examples for real, and checks the other providers and local backends with `--dry-run`.
+- Live cost: about $5 with the current docs. A command shape that occurs on several pages runs once. The script stops before any paid call if the estimate is over $6 (`--max-usd N` changes the cap), and sets `IMGEN_BUDGET` to the same cap. Live runs Gemini, OpenAI and Codex examples for real, and checks the other providers and local backends with `--dry-run`.
 - Results go to a new `$TMPDIR/imgen-smoke.XXXXXX/` folder (`--out DIR` to change): `summary.md` has PASS, FAIL or SKIP and a reason for each command, and `review/` has small copies of every image. A mock run also writes `mock/requests.jsonl`, one line per request the mock served.
 - Mock images are flat shapes in colors taken from the prompt. They prove the plumbing, not the picture. After a live run, look at the images in `review/`: the script cannot see garbled text, a wrong subject or a halo around a cutout.
 - Mock mode cannot prove that the real APIs still accept imgen's fields, models and sizes, what a call costs, or how the pictures look. It does not test streamed partial images (imgen does not stream to a custom endpoint), rate limits, retries or moderation, and it does not run Codex, Ideogram, BFL, fal or Higgsfield. That is what `--live` is for.

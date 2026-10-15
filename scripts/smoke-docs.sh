@@ -12,7 +12,7 @@
 # examples with --dry-run first and stops if the total is over the cap.
 #
 # Usage: scripts/smoke-docs.sh [--live [--estimate] [--max-usd N] [--reuse DIR]] [--out DIR]
-#   --live       call the real APIs (paid, about $4)
+#   --live       call the real APIs (paid, about $5)
 #   --estimate   with --live: plan and price only; make no paid call
 #   --max-usd N  with --live: refuse to run when the estimate is over N (default 6)
 #   --out DIR    run folder (default: $SMOKE_OUT or a new $TMPDIR/imgen-smoke.XXXXXX)
@@ -133,12 +133,10 @@ SH
 	done
 	[ -s "$RUN/mock/port" ] || { echo "smoke-docs: the mock did not start; see $RUN/mock/server.log" >&2; exit 2; }
 	MOCK="http://127.0.0.1:$(cat "$RUN/mock/port")"
-	# --enhance reads only the rules file's base_url, so the built-in instances
-	# get one there too, besides GEMINI_BASE_URL and OPENAI_BASE_URL.
+	# The built-in gemini and openai instances reach the mock through the
+	# documented GEMINI_BASE_URL and OPENAI_BASE_URL; the others need rules.
 	cat >"$RUN/mock/rules.json" <<JSON
 {"providers": {
-  "gemini": {"base_url": "$MOCK/v1beta"},
-  "openai": {"base_url": "$MOCK/v1", "api_key_env": "OPENAI_API_KEY"},
   "recraft": {"base_url": "$MOCK/recraft"},
   "replicate": {"base_url": "$MOCK/replicate"}
 }}
