@@ -24,7 +24,10 @@ func TestSlugNameAndNameWins(t *testing.T) {
 }
 
 func TestNameGuard(t *testing.T) {
-	bad := []string{"../x", "a/b", `a\b`, ".hidden", "a..b", "a\x01b", "a\nb", "a\x7fb"}
+	bad := []string{"../x", "a/b", `a\b`, ".hidden", "a..b", "a\x01b", "a\nb", "a\x7fb",
+		"a\xc2\x9bb", "a\x9bb", // C1 CSI as a rune and as a raw byte
+		"a\xe2\x80\xaeb", "a\xe2\x81\xa6b", // bidi RLO and LRI: the printed path would read spoofed
+	}
 	for _, name := range bad {
 		for _, verb := range []string{"gen", "upscale"} {
 			h, _ := pngHarness(t, 4, 4, color.White)
