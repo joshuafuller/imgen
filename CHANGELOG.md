@@ -22,6 +22,10 @@ Every entry links to the commit that made the change.
 - **CLI:** With `--remove-bg`, a cutout given as `-i` is put on the screen color before it is sent. ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
 - **CLI:** After `--pixel`, `--resize` keeps the pixels sharp. ([`a232d09`](https://github.com/joshuafuller/imgen/commit/a232d099c723999714d0a513cea85727319efea5))
 
+### Fixed
+
+- **Providers:** Gemini's unnamed output tokens, its thinking, now count at the text rate, as Google bills them; a 1K image records about $0.068, not $0.09. ([`7f78926`](https://github.com/joshuafuller/imgen/commit/7f78926798512a1956e449c2fe6e8ce000f7988d))
+
 ## [0.5.3] - 2026-10-15
 
 `IMGEN_BUDGET` now holds a call's top price before the call and counts the tokens that the API reports after it, so a large OpenAI image or an edit can no longer go past the limit unseen.
