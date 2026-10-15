@@ -43,6 +43,7 @@ type Env struct {
 	// Optional desktop and network hooks; nil means the real behavior.
 	OpenFile  func(path string) error
 	Inline    func(w io.Writer, path string) (bool, error)
+	Blocks    func(w io.Writer, path string) (bool, error)
 	CopyImage func(path string) error
 	Notify    func(title, body string) error
 	Enhance   func(ctx context.Context, cfg enhance.Config, prompt string) (string, error)

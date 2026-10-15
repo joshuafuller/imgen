@@ -46,7 +46,8 @@ func runUpscale(args []string, stdout, stderr io.Writer, env Env) error {
 	fs.BoolVar(&o.asJSON, "json", false, "print the result as JSON")
 	fs.DurationVar(&o.timeout, "timeout", defaultTimeout, "deadline for the whole call")
 	fs.BoolVar(&o.open, "open", false, "open the result in the default viewer")
-	fs.BoolVar(&o.preview, "preview", false, "show the result inline in the terminal when supported")
+	fs.BoolVar(&o.preview, "preview", false, "show the result in the terminal, as half blocks if it has no graphics")
+	fs.BoolVar(&o.noPreview, "no-preview", false, "never show the result in the terminal")
 	fs.BoolVar(&o.copy, "copy", false, "copy the result to the clipboard")
 	fs.BoolVar(&o.quiet, "quiet", false, "no info lines on stderr")
 	fs.BoolVar(&o.notify, "notify", false, "send a desktop notice when done")
@@ -64,6 +65,7 @@ func runUpscale(args []string, stdout, stderr io.Writer, env Env) error {
 	if err := setPipes(env, o, stdout); err != nil {
 		return err
 	}
+	setPreview(env, o, stderr)
 	info := stderr
 	if o.quiet {
 		info = io.Discard

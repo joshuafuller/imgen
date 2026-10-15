@@ -89,6 +89,7 @@ type genOpts struct {
 	profile                                                     string
 	styles                                                      listFlag
 	last, open, preview, copy, quiet, notify, noEmbed, useCache bool
+	noPreview, autoPreview                                      bool // autoPreview is set by setPreview
 	embedPrompt                                                 bool
 	enhance, force, grid                                        bool
 	tidy                                                        bool   // one summary line on a terminal instead of the info lines
@@ -131,7 +132,8 @@ func registerExtraFlags(fs *flag.FlagSet, o *genOpts) {
 	fs.StringVar(&o.profile, "profile", "", "apply a named flag profile from the rules (explicit flags win)")
 	fs.BoolVar(&o.last, "last", false, "use the newest history output as an input image (-i)")
 	fs.BoolVar(&o.open, "open", false, "open the result in the default viewer")
-	fs.BoolVar(&o.preview, "preview", false, "show the result inline in the terminal when supported")
+	fs.BoolVar(&o.preview, "preview", false, "show the result in the terminal, as half blocks if it has no graphics")
+	fs.BoolVar(&o.noPreview, "no-preview", false, "never show the result in the terminal")
 	fs.BoolVar(&o.copy, "copy", false, "copy the first result to the clipboard")
 	fs.BoolVar(&o.quiet, "quiet", false, "no info lines on stderr and no spinner (errors still print)")
 	fs.BoolVar(&o.notify, "notify", false, "send a desktop notice when done")
@@ -545,6 +547,7 @@ func runGen(args []string, stdout, stderr io.Writer, env Env, edit bool) error {
 	if err := setPipes(env, o, stdout); err != nil {
 		return err
 	}
+	setPreview(env, o, stderr)
 	o.histArgs = sanitizeArgs(env, args)
 	info := stderr
 	if o.quiet {

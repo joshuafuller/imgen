@@ -114,6 +114,7 @@ Behavior
   IMGEN_RETRIES              attempts for HTTP 429 and 5xx (default 3)
   IMGEN_ALLOW_PRIVATE_URLS   1 allows -i URLs on private addresses
   IMGEN_QUIET                any value turns off the spinner
+  IMGEN_PREVIEW              off, auto (default) or always: the result in the terminal
   GEMINI_BASE_URL            endpoint of the built-in gemini instance
   OPENAI_BASE_URL            endpoint of the built-in openai instance
   NO_COLOR                   plain output on a terminal
@@ -172,7 +173,8 @@ func genFlagHelp(cmd string) []helpGroup {
 			{"--force", "ignore IMGEN_BUDGET"},
 			{"--timeout DURATION", "deadline for the whole call (default 5m)"},
 			{"--open", "open the result in the default viewer"},
-			{"--preview", "show the result inline, if the terminal can"},
+			{"--preview", "show the result in the terminal, as half blocks if it has no graphics"},
+			{"--no-preview", "never show the result in the terminal (default: inline on kitty, iTerm2, sixel)"},
 			{"--copy", "copy the first result to the clipboard"},
 			{"--notify", "send a desktop notice when done"},
 		}},

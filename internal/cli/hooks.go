@@ -88,6 +88,13 @@ func (e Env) inline(w io.Writer, path string) (bool, error) {
 	return preview.Inline(w, path)
 }
 
+func (e Env) blocks(w io.Writer, path string) (bool, error) {
+	if e.Blocks != nil {
+		return e.Blocks(w, path)
+	}
+	return preview.Blocks(w, path)
+}
+
 func (e Env) copyImage(path string) error {
 	if e.CopyImage != nil {
 		return e.CopyImage(path)
@@ -109,11 +116,35 @@ func (e Env) enhancePrompt(ctx context.Context, cfg enhance.Config, prompt strin
 	return enhance.Prompt(ctx, cfg, prompt)
 }
 
-// afterSave runs --preview, --open and --copy on the saved files. Failures are
-// warnings: the images are already on disk.
+// setPreview turns --preview, --no-preview and IMGEN_PREVIEW (off, auto or
+// always) into o.preview (show every image, as half blocks when the terminal
+// has no graphics) or o.autoPreview (show the first image, only when stderr
+// is a terminal and only with a graphics protocol). The flags beat the
+// variable. --json, --quiet and -o - never show anything. Only gen, edit and
+// upscale call it, so batch and compare preview on --preview alone.
+func setPreview(env Env, o *genOpts, stderr io.Writer) {
+	mode := strings.ToLower(strings.TrimSpace(env.getenv("IMGEN_PREVIEW")))
+	switch {
+	case o.asJSON || o.quiet || o.stdout != nil || o.noPreview:
+		o.preview = false
+	case o.preview || mode == "always":
+		o.preview = true
+	case mode != "off":
+		o.autoPreview = env.style(stderr).On
+	}
+}
+
+// afterSave runs the preview, --open and --copy on the saved files. Failures
+// are warnings: the images are already on disk. A preview that cannot be
+// drawn (an SVG, an image over the limits) shows nothing.
 func afterSave(env Env, o *genOpts, files []string, stderr io.Writer) {
-	for _, f := range files {
-		if o.preview {
+	for i, f := range files {
+		switch {
+		case o.preview:
+			if ok, _ := env.inline(stderr, f); !ok {
+				_, _ = env.blocks(stderr, f)
+			}
+		case o.autoPreview && i == 0:
 			_, _ = env.inline(stderr, f)
 		}
 		if o.open {
