@@ -14,6 +14,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -165,7 +166,9 @@ func TestStreamEditSendsStreamFields(t *testing.T) {
 }
 
 func TestStreamTruncated(t *testing.T) {
+	var calls atomic.Int32
 	srv := streamServer(t, nil, func(w http.ResponseWriter) {
+		calls.Add(1)
 		eventStream(w)
 		sse(w, "image_generation.partial_image", partialEvent("image_generation", 0, b64(pngOf(t, 2, 2))))
 		_, _ = io.WriteString(w, "event: image_generation.completed\ndata: {\"type\":\"image_gen") // cut mid-event
@@ -175,8 +178,8 @@ func TestStreamTruncated(t *testing.T) {
 	if !errors.Is(err, errStreamEnded) {
 		t.Fatalf("err = %v", err)
 	}
-	if len(*got) != 1 {
-		t.Errorf("partials %d", len(*got))
+	if len(*got) != 1 || calls.Load() != 1 {
+		t.Errorf("partials %d, requests %d", len(*got), calls.Load())
 	}
 }
 
@@ -220,7 +223,9 @@ func TestStreamOverByteCap(t *testing.T) {
 }
 
 func TestStreamErrorEvent(t *testing.T) {
+	var calls atomic.Int32
 	srv := streamServer(t, nil, func(w http.ResponseWriter) {
+		calls.Add(1)
 		eventStream(w)
 		sse(w, "image_generation.partial_image", partialEvent("image_generation", 0, b64(pngOf(t, 2, 2))))
 		sse(w, "error", map[string]any{"type": "error", "error": map[string]any{"message": "safety system rejected it"}})
@@ -229,6 +234,9 @@ func TestStreamErrorEvent(t *testing.T) {
 	_, err := newTestClient(srv).GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
 	if !errors.Is(err, errAPI) || !strings.Contains(err.Error(), "safety system rejected it") {
 		t.Fatalf("err = %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Errorf("requests %d", calls.Load())
 	}
 }
 
@@ -247,10 +255,13 @@ func TestStreamUnknownEventIgnored(t *testing.T) {
 	}
 }
 
-// A server that ignores stream and answers JSON still works.
+// A server that ignores stream and answers JSON still works, with no second
+// request.
 func TestStreamJSONAnswer(t *testing.T) {
 	final := pngOf(t, 4, 4)
+	var calls atomic.Int32
 	srv := streamServer(t, nil, func(w http.ResponseWriter) {
+		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": b64(final)}}})
 	})
@@ -258,6 +269,9 @@ func TestStreamJSONAnswer(t *testing.T) {
 	res, err := newTestClient(srv).GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
 	if err != nil || len(res.Images) != 1 || !bytes.Equal(res.Images[0].Data, final) || len(*got) != 0 {
 		t.Fatalf("res %+v err %v", res, err)
+	}
+	if calls.Load() != 1 {
+		t.Errorf("requests %d", calls.Load())
 	}
 }
 
@@ -293,46 +307,104 @@ func TestStreamNotUsed(t *testing.T) {
 	}
 }
 
-// Before the first event, a retryable status or a stream refusal falls back
-// to the plain call, which has the retries.
-func TestStreamFallsBackBeforeFirstEvent(t *testing.T) {
+// resetConn drops the connection with a TCP reset before any response.
+func resetConn(t *testing.T, w http.ResponseWriter) {
+	conn, _, err := http.NewResponseController(w).Hijack()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if tc, ok := conn.(*net.TCPConn); ok {
+		_ = tc.SetLinger(0)
+	}
+	_ = conn.Close()
+}
+
+// A failure that does not prove a refusal to stream is the error, with no
+// second call: the API may have run (and billed) the streamed request. It
+// is not remembered either.
+func TestStreamFailureNoSecondCall(t *testing.T) {
+	t.Cleanup(streamRefused.Clear)
+	status := func(code int, body string) func(*testing.T, http.ResponseWriter) {
+		return func(_ *testing.T, w http.ResponseWriter) {
+			w.WriteHeader(code)
+			_, _ = io.WriteString(w, body)
+		}
+	}
 	cases := []struct {
-		name   string
-		status int
-		msg    string
+		name string
+		fail func(*testing.T, http.ResponseWriter)
+		want string
 	}{
-		{"503", http.StatusServiceUnavailable, "busy"},
-		{"stream refused", http.StatusBadRequest, "Your organization must be verified to stream this model."},
+		{"reset before headers", resetConn, "openai: request:"},
+		{"429", status(http.StatusTooManyRequests, `{"error":{"message":"Too many streaming requests."}}`), "HTTP 429"},
+		{"503", status(http.StatusServiceUnavailable, `{"error":{"message":"Streaming is busy."}}`), "HTTP 503"},
+		{"408 stream timeout", status(http.StatusRequestTimeout, "stream timeout"), "HTTP 408"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			final := pngOf(t, 4, 4)
 			var calls atomic.Int32
-			var streamed []bool
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls.Add(1)
 				var body map[string]any
 				_ = json.NewDecoder(r.Body).Decode(&body)
-				streamed = append(streamed, body["stream"] == true)
+				_, _ = io.Copy(io.Discard, r.Body)
 				if body["stream"] == true {
-					w.WriteHeader(tc.status)
-					_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"message": tc.msg}})
+					tc.fail(t, w)
 					return
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": b64(final)}}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": b64(pngOf(t, 4, 4))}}})
 			}))
 			defer srv.Close()
 			c := newTestClient(srv)
 			c.Retry = fastRetry()
 			_, onPartial := collectPartials()
-			res, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
-			if err != nil || len(res.Images) != 1 {
-				t.Fatalf("res %+v err %v", res, err)
+			_, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "--no-stream") {
+				t.Errorf("err = %v", err)
 			}
-			if calls.Load() != 2 || !streamed[0] || streamed[1] {
-				t.Errorf("calls %d streamed %v", calls.Load(), streamed)
+			if calls.Load() != 1 {
+				t.Errorf("requests %d, want 1", calls.Load())
+			}
+			if n := c.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
+				t.Errorf("remembered as a refusal: StreamPartials %d", n)
 			}
 		})
+	}
+}
+
+// An explicit refusal to stream falls back to the plain call: the API ran
+// nothing for the refused request, so only the plain call is billed.
+func TestStreamRefusalFallsBack(t *testing.T) {
+	t.Cleanup(streamRefused.Clear)
+	final := pngOf(t, 4, 4)
+	var calls atomic.Int32
+	var streamed []bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		streamed = append(streamed, body["stream"] == true)
+		if body["stream"] == true {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"error":{"message":"Your organization must be verified to stream this model."}}`)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64_json": b64(final)}}})
+	}))
+	defer srv.Close()
+	c := newTestClient(srv)
+	c.Retry = fastRetry()
+	_, onPartial := collectPartials()
+	res, err := c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
+	if err != nil || len(res.Images) != 1 || !bytes.Equal(res.Images[0].Data, final) {
+		t.Fatalf("res %+v err %v", res, err)
+	}
+	if calls.Load() != 2 || !streamed[0] || streamed[1] {
+		t.Errorf("calls %d streamed %v", calls.Load(), streamed)
+	}
+	if n := c.StreamPartials(provider.Request{Prompt: "x"}); n != 0 {
+		t.Errorf("refusal not remembered: StreamPartials %d", n)
 	}
 }
 
@@ -436,21 +508,6 @@ func TestStreamRefusalRemembered(t *testing.T) {
 	other.APIKey = "sk-other-org"
 	if n := other.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
 		t.Errorf("another key inherits the refusal: %d", n)
-	}
-}
-
-// A busy server is not a refusal: the next call streams again.
-func TestStreamBusyNotRemembered(t *testing.T) {
-	t.Cleanup(streamRefused.Clear)
-	srv := streamServer(t, nil, func(w http.ResponseWriter) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	})
-	c := newTestClient(srv)
-	c.Retry = httpx.Policy{Attempts: 1}
-	_, onPartial := collectPartials()
-	_, _ = c.GenerateStream(context.Background(), provider.Request{Prompt: "x"}, onPartial)
-	if n := c.StreamPartials(provider.Request{Prompt: "x"}); n != streamPartials {
-		t.Errorf("StreamPartials after a 503: %d", n)
 	}
 }
 

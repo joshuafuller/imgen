@@ -70,10 +70,16 @@ func (c *Client) refusalKey() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// stream runs one streamed call. fallback is true when the stream did not
-// start for a reason a plain call (with its retries) may not hit: a network
-// error, a retryable status, or a refusal to stream (an organization that
-// is not verified). No event has been read then, so nothing is lost.
+// retryHint ends a streamed call's error that a second request could bill
+// twice. The user decides: a retry is a new call, priced and counted.
+const retryHint = "Retry, or use --no-stream"
+
+// stream runs one streamed call. fallback is true only after a 4xx that
+// refuses the stream options themselves (an organization that is not
+// verified): the API ran nothing, so the plain call is the only one billed.
+// Every other failure is the error, never a second call. After a network
+// error, a timeout or a 5xx the API may have run and billed the request,
+// and the budget holds one call; 429 says nothing about streaming either.
 func (c *Client) stream(ctx context.Context, req provider.Request, onPartial func(provider.Image)) (imgs []provider.Image, fallback bool, err error) {
 	sreq := req
 	sreq.Extra = maps.Clone(req.Extra)
@@ -87,22 +93,26 @@ func (c *Client) stream(ctx context.Context, req provider.Request, onPartial fun
 		return nil, false, err
 	}
 	r.Header.Set("Accept", "text/event-stream")
+	// One attempt, not httpx.Send. With no Idempotency-Key header, net/http
+	// replays the POST only when the server never got it.
 	resp, err := c.httpc().Do(r)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, false, fmt.Errorf("openai: request: %w", ctx.Err())
 		}
-		return nil, true, nil
+		return nil, false, fmt.Errorf("openai: request: %w. %s", err, retryHint)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	maxBytes := c.retryPolicy(true).MaxBytes
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, httpx.DefaultPolicy().MaxBytes))
 		serr := statusError(resp.StatusCode, body)
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			return nil, true, nil
+		// Checked first: "stream timeout" (408) or a 429 about streaming
+		// requests is not a refusal to stream.
+		if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return nil, false, fmt.Errorf("%w. %s", serr, retryHint)
 		}
-		if refusesStream(serr) {
+		if resp.StatusCode >= 400 && refusesStream(serr) {
 			streamRefused.Store(c.refusalKey(), struct{}{})
 			return nil, true, nil
 		}
