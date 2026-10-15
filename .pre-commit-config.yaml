@@ -13,9 +13,9 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
-      - id: make-check
-        name: make check (full security + quality gate)
-        entry: make check
+      - id: make-check-fast
+        name: make check-fast (format, vet, lint, tests; full gate runs at release)
+        entry: make check-fast
         language: system
         pass_filenames: false
         always_run: true

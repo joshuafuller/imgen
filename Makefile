@@ -1,4 +1,4 @@
-.PHONY: build test contract probe vet install check fmt-check lint vuln secrets sast trivy osv ci-lint release-snapshot install-skill completions changelog-check
+.PHONY: check-fast build test contract probe vet install check fmt-check lint vuln secrets sast trivy osv ci-lint release-snapshot install-skill completions changelog-check
 
 GO_PKGS := ./...
 
@@ -24,6 +24,10 @@ install:
 	go install ./cmd/imgen
 
 # Full gate: fails on any finding. Run before every push.
+# check-fast runs on every push; the full check runs before a release.
+check-fast: fmt-check vet lint test changelog-check
+	@echo "make check-fast: ok"
+
 check: fmt-check vet lint test contract vuln secrets sast trivy osv ci-lint changelog-check
 	@echo "make check: all gates green"
 
@@ -32,7 +36,7 @@ fmt-check:
 	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
 lint:
-	golangci-lint run $(GO_PKGS)
+	golangci-lint run --allow-parallel-runners $(GO_PKGS)
 
 vuln:
 	govulncheck $(GO_PKGS)

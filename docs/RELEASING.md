@@ -18,7 +18,7 @@ Pick the version `X.Y.Z`. Work on `main` with a clean tree.
 
 1. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, and add a fresh empty `## [Unreleased]` above it. Add the highlights paragraph, the `**Full changelog:**` link and a commit link on every bullet.
 2. Update the links at the bottom: `[Unreleased]` compares `vX.Y.Z...HEAD`, and `[X.Y.Z]` compares the previous tag with `vX.Y.Z`.
-3. Run `make check`. It includes `make changelog-check`. Do not continue on a failure.
+3. Run the full `make check` (pushes only run `make check-fast`). It includes `make changelog-check`. Do not continue on a failure.
 4. Smoke test the docs (see [below](#smoke-test-the-docs)). Do not continue on a FAIL.
 5. Commit: `git commit -am "chore(release): vX.Y.Z"`.
 6. Tag: `git tag -a vX.Y.Z -m "imgen vX.Y.Z"`.
