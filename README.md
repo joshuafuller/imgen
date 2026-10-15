@@ -26,7 +26,7 @@ imgen gen -r 4K -a 16:9 "a lone lighthouse at dusk, no text"
 
 ## Why imgen
 
-- **Safe with your money.** imgen never sends a paid request twice if it may have run. It tries again only when the official API refuses a request with a rate limit (HTTP 429), and it shows each try. `IMGEN_BUDGET` caps your daily spend, and imgen checks it before every paid call, also across parallel jobs. `--dry-run` shows the cost first.
+- **Safe with your money.** imgen never sends a paid request twice if it may have run. It tries again only when the official API refuses a request with a rate limit (HTTP 429), and it shows each try. [`IMGEN_BUDGET`](docs/configuration.md#daily-budget) caps imgen's estimated daily spend, and imgen checks it before every paid call, also across parallel jobs. `--dry-run` shows the estimate first.
 - **Safe with your keys and files.** Keys stay in a private file that imgen reads itself, so they never enter your shell or other programs. Files are never overwritten, every response is checked, and the MCP server works only inside one folder. See [Security](docs/security.md).
 - **Made for scripts and agents.** Paths on stdout, `--json` results, stable exit codes, pipes with `-i -` and `-o -`, a Claude Code skill, and `imgen mcp`.
 - **New models work on day one.** `imgen models` asks each API what exists now, `-m latest` picks the newest, and any model ID passes straight through.

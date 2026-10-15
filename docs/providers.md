@@ -62,7 +62,7 @@ A model ID may use only letters, digits and `. _ : / @ + -`. It may be at most 2
 Costs are estimates. imgen prints one with `--dry-run` and records it in the history. The table is embedded in the binary.
 
 - `gemini`: priced per image. The `gemini-3.1-flash-image` and `gemini-3-pro-image` families are priced by size. `gemini-3.1-flash-lite-image` and `gemini-2.5-flash-image` have one price each.
-- `openai`: priced by quality and size. These prices are marked unverified in `internal/pricing/prices.json`.
+- `openai`: priced by quality, and by size for 1024x1024, 1024x1536 and 1536x1024. Other sizes get the 1024x1024 price, and an edit does not count its input images. These prices are marked unverified in `internal/pricing/prices.json`.
 - `codex`: shown as $0 (`~$0.000`). Codex uses your plan quota.
 - Every other provider, and any Gemini model not in the table: `cost: unknown`.
 
