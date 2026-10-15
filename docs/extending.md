@@ -245,7 +245,7 @@ func factory(cfg provider.Config) (provider.Provider, error) {
 }
 ```
 
-4. Send every HTTP call through `httpx.Send`. It retries 429, 500, 502, 503 and 504 with backoff, and honors `Retry-After`. Use `httpx.DefaultPolicy()` for API calls. It makes 3 attempts, or `IMGEN_RETRIES` attempts, and caps a response at 16 MiB. Use `httpx.ImagePolicy()` to download result images. It allows 64 MiB.
+4. Send every HTTP call through `httpx.Send`. Use `httpx.PaidPolicy()` for every request that can bill (a generate, edit or submit): it retries only a 429. Append `pol.Hint(status)` to its status error. Use `httpx.DefaultPolicy()` for free API calls such as polls and model lists, and `httpx.ImagePolicy()` for downloads. All make 3 attempts, or `IMGEN_RETRIES` attempts, and honor `Retry-After`.
 5. When the backend cannot do something the user asked for, return a wrapped `provider.ErrUnsupported`. For example:
 
 ```go
