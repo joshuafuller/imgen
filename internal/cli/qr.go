@@ -249,6 +249,7 @@ func qrDry(env Env, q *qrOpts, code *qr.Code, tmp, guidePath, prompt string, std
 	if q.gen.stdout != nil {
 		w = info // stdout carries only image bytes
 	}
+	oc.o.inputs = listFlag{"(the QR guide)"} // not the temporary path
 	oc.printDry(w)
 	fmt.Fprintf(w, "qr: version %d (%dx%d modules), level H, up to %d tries\n", code.Version, code.Size, code.Size, q.tries)
 	return nil
@@ -389,7 +390,7 @@ func qrFailure(tries []qrTry, best *qrTry, serr error) error {
 	if best.report.Pass() {
 		return nil
 	}
-	return fmt.Errorf("no try passed the scan check; saved the best (%d of %d modules wrong, finder %d, timing %d). It may not scan: try again, raise -n, or add --safe",
+	return fmt.Errorf("no try passed the scan check; saved the best (%d of %d modules wrong, finder %d, timing %d). It may not scan: run it again or raise -n",
 		best.report.Wrong, best.report.Modules, best.report.ByKind[qr.Finder], best.report.ByKind[qr.Timing])
 }
 
