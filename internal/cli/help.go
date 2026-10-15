@@ -24,6 +24,7 @@ var topGroups = []helpGroup{
 		{"batch", "run many jobs from a JSONL file"},
 		{"compare", "one prompt on several providers, plus a contact sheet"},
 		{"upscale", "make an image larger"},
+		{"qr", "QR code art that still scans"},
 		{"interactive", "a terminal session: prompt, refine, pick (also imgen -i)"},
 	}},
 	{"Review", [][2]string{
@@ -213,6 +214,11 @@ var cmdExamples = map[string][]string{
 	"upscale": {
 		`imgen upscale photo.png`,
 		`imgen upscale --scale 4 --local photo.png`,
+	},
+	"qr": {
+		`imgen qr https://github.com/joshuafuller/imgen "a calm koi pond with lily pads"`,
+		`imgen qr --safe -n 5 https://example.com "an autumn forest seen from above"`,
+		`imgen qr --guide-only -o - https://example.com > code.png`,
 	},
 	"history": {
 		`imgen history -n 5`,

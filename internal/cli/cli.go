@@ -160,7 +160,7 @@ func commands() map[string]handler {
 		"gen": gen(false), "edit": gen(true), "batch": runBatch, "compare": runCompare,
 		"upscale": runUpscale, "rerun": runRerun, "history": runHistory, "styles": runStyles,
 		"profiles": runProfiles, "init": runInit, "models": runModels, "providers": runProviders,
-		"doctor": runDoctor, "interactive": runInteractive,
+		"doctor": runDoctor, "interactive": runInteractive, "qr": runQR,
 		"completion": func(a []string, o, e io.Writer, _ Env) error { return runCompletion(a, o, e) },
 		"version": func(_ []string, o, _ io.Writer, env Env) error {
 			fmt.Fprintf(o, "imgen %s (%s, %s/%s)\n", env.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)

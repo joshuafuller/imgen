@@ -11,6 +11,7 @@ This page lists every imgen command and flag, the output contract that scripts a
 | `imgen batch [-j N] [flags] jobs.jsonl` | Run many jobs from a JSONL file in parallel. `-` reads stdin. |
 | `imgen compare -p a,b[,c] [flags] "prompt"` | Run one prompt on several providers and write a labelled sheet. |
 | `imgen upscale [-p replicate\|fal] [--scale 2\|4] [--local] in.png` | Make an image larger. |
+| `imgen qr [flags] TEXT "scene"` | Make QR code art that still scans. See [qr](#qr). |
 | `imgen rerun <id\|last> [flags]` | Run an earlier command again. |
 | `imgen interactive [flags]` | Start a terminal session: prompt, refine, pick. `imgen -i` does the same. A bare `imgen` on a terminal also starts it. See [Interactive mode](interactive.md). |
 | `imgen history [-n 20] [--json] [--cost [--since 7d]]` | List past runs, or show spend. |
@@ -149,6 +150,26 @@ imgen upscale [-p replicate|fal] [-m model] [--scale 2|4] [--local] in.png
 
 The input can be a file, a URL, `clip:` or `-` for stdin. `-o -` writes the result to stdout. The result is saved as `<input>-x<scale>.<ext>`. With `--json` it prints `{"ok":true,"path":"...","elapsed_ms":N}`.
 
+## qr
+
+```sh
+imgen qr [flags] TEXT "scene"
+imgen qr --guide-only [-o DIR|-] TEXT
+```
+
+Makes QR code art that still scans. imgen encodes TEXT as a QR code (byte mode, error correction H, version 1 to 10, so at most 119 bytes), draws it black on white with a quiet zone of 4 modules at about 1024 px, and sends it with the prompt through the `edit` path. The budget, cache, history, redaction and image checks apply as in `edit`. imgen then finds the module grid on the result, reads each module and counts the modules that differ from the true code. A try passes when fewer than 3% of the modules are wrong and at most 2 modules of the finder, separator and timing patterns are wrong. A pattern module counts as wrong only when it reads wrong by more than 8% of the contrast between dark and light, so a module just across the threshold does not stop a pass. imgen stops at the first try that passes. If no try passes, it saves the try with the fewest wrong modules, writes `It may not scan` on stderr and exits with 1. stderr gets one line per try, such as `try 1: 23 of 1369 modules wrong (1.7%), finder 0, separator 1, timing 0: pass`.
+
+| Flag | Meaning |
+|---|---|
+| `-n`, `--count N` | Most tries. Default 3. Each try is one paid edit. |
+| `--safe` | Paint a feathered pale band about 2 modules wide around the code, so strict readers find a quiet zone. The code itself does not change. |
+| `--guide-only` | Write only the plain QR code (`qr-guide.png`). No API call and no history entry. With `--json` it prints `{"ok":true,"path":...,"version":N,"modules":N}`. |
+| `--dark text`, `--light text` | What the dark and the light modules become in the prompt. |
+| `-p`, `-m`, `-r`, `-q` | As in `gen`. The provider default is `gemini`. The aspect is always `1:1`. |
+| `-o`/`--output`, `--name`, `--json`, `--dry-run`, `--timeout`, `--cache`, `--force`, `--no-embed`, `--embed-prompt`, `--open`, `--preview`, `--no-preview`, `--copy`, `--quiet`, `--notify` | As in `gen`. `--timeout` applies to each try. `--cache` applies only to the first try. |
+
+The file name comes from the scene, such as `calm-koi-pond-with-lily-pads.jpg`. `-o -` writes the result to stdout. One history entry records all the tries and their summed cost, and `imgen rerun` replays it. With `--json` it prints one object: `{"ok":..., "passed":..., "path":..., "provider":..., "model":..., "version":5, "modules":1369, "wrong":N, "safe":..., "cost_usd":..., "cost_known":..., "tries":[{"try":1, "wrong":N, "finder_wrong":N, "separator_wrong":N, "timing_wrong":N, "pass":...}]}`. A failed try has `"error"` in place of the counts. `--dry-run` prints the request of one try, the cost of one try and the cost of all `-n` tries (the worst case). With `--json` the dry run prints the `gen --json` dry-run object plus `"tries"`, `"cost_usd_max"`, `"version"` and `"modules"`.
+
 ## Pipes
 
 `-i -` reads the input image from stdin, and `-o -` writes the image to stdout instead of a file. `gen`, `edit` and `upscale` take both, so commands chain like other Unix tools:
@@ -207,7 +228,7 @@ Starts a terminal session. Each prompt generates an image. Each next prompt edit
 imgen rerun <id|last> [extra flags]
 ```
 
-Runs an earlier command again with the same flags. Extra flags go at the end, so they win: `imgen rerun last -p openai --seed 7`. Find IDs with `imgen history`. Only `gen`, `edit`, `compare` and `upscale` entries can be replayed; `batch` jobs cannot. Secret `--set` values are never recorded, so a rerun cannot replay them. With `IMGEN_HISTORY_PROMPTS=off` the arguments are not stored, so rerun is not available.
+Runs an earlier command again with the same flags. Extra flags go at the end, so they win: `imgen rerun last -p openai --seed 7`. Find IDs with `imgen history`. Only `gen`, `edit`, `compare`, `upscale` and `qr` entries can be replayed; `batch` jobs cannot. Secret `--set` values are never recorded, so a rerun cannot replay them. With `IMGEN_HISTORY_PROMPTS=off` the arguments are not stored, so rerun is not available.
 
 ## history
 

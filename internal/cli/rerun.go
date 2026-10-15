@@ -26,7 +26,7 @@ func runRerun(args []string, stdout, stderr io.Writer, env Env) error {
 	if err != nil {
 		return usagef("rerun %s: %v", id, err)
 	}
-	if len(e.Args) == 0 || !slices.Contains([]string{"gen", "edit", "compare", "upscale"}, e.Command) {
+	if len(e.Args) == 0 || !slices.Contains([]string{"gen", "edit", "compare", "upscale", "qr"}, e.Command) {
 		return errNotReplayable
 	}
 	full := append([]string{e.Command}, e.Args...)
