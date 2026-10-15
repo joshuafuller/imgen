@@ -13,6 +13,11 @@ Every entry links to the commit that made the change.
 - **Docs:** `examples/sprite/`: animate a game character into a seamless sprite loop, in pixel-art or smooth style, with a sprite sheet and a TexturePacker-style atlas.
 - **Docs:** README badges.
 
+### Security
+
+- **Providers:** A request that can bill is never sent twice, not even after a 429; a 429 error says when to run it again, and `IMGEN_RETRIES` now covers only downloads, polls and model lists. ([`2a08f76`](https://github.com/joshuafuller/imgen/commit/2a08f7688f9f14b328e56c0342c5553de7909e19)) ([`57899f2`](https://github.com/joshuafuller/imgen/commit/57899f20460b66687580ab2098fcc5a53fad8799))
+- **Providers:** When OpenAI refuses to stream, imgen does not send the plain request by itself; it remembers the refusal for that key, so the next run makes the plain call. ([`a46f9f0`](https://github.com/joshuafuller/imgen/commit/a46f9f070829ea51e4e7c9480f8397f347260964))
+
 ## [0.5.0] - 2026-10-15
 
 Terminal-native imgen: pipes, pictures right in the terminal, an interactive mode, live
