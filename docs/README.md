@@ -12,6 +12,7 @@ imgen is one command-line tool for many image models: Gemini, OpenAI, Codex, Ide
 | [Providers](providers.md) | Each backend: keys, models, sizes, edit, mask and transparency support, quirks and costs. |
 | [Configuration](configuration.md) | Key file, rules file, styles, profiles, budget, history and cache. |
 | [Recipes](recipes.md) | Worked examples: icons, product shots, logos, labeled diagrams, wallpapers, batches, compare. |
+| [Interop recipes](interop.md) | imgen with other tools: pipes, `convert`, `montage`, `ffmpeg`, `jq`, `xargs`, `fzf`, history and metadata. |
 | [Troubleshooting](troubleshooting.md) | Error messages and their fixes. |
 
 ## Connect and extend

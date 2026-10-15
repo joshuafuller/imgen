@@ -243,7 +243,7 @@ def inputs_of(argv):
         ins += split_args(argv)[1]
     if sub == "batch":
         ins += split_args(argv)[1]
-    return [x for x in ins if not re.match(r"^(https?:|clip:)", x)]
+    return [x for x in ins if x != "-" and not re.match(r"^(https?:|clip:)", x)]
 
 
 def doctor_ready():
