@@ -100,8 +100,14 @@ func (s *sixelImage) exact(img *image.NRGBA) bool {
 	return true
 }
 
-// writeSixel encodes img as one sixel image with a transparent background.
+// writeSixel writes img as one sixel image and a newline.
 func writeSixel(w io.Writer, img *image.NRGBA) error {
+	_, err := io.WriteString(w, encodeSixel(img)+"\n")
+	return err
+}
+
+// encodeSixel encodes img as one sixel image with a transparent background.
+func encodeSixel(img *image.NRGBA) string {
 	s := quantize(img)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "\x1bP0;1;0q\"1;1;%d;%d", s.w, s.h)
@@ -113,9 +119,8 @@ func writeSixel(w io.Writer, img *image.NRGBA) error {
 		s.band(&sb, y0)
 		sb.WriteByte('-')
 	}
-	sb.WriteString("\x1b\\\n")
-	_, err := io.WriteString(w, sb.String())
-	return err
+	sb.WriteString("\x1b\\")
+	return sb.String()
 }
 
 // band writes the six pixel rows from y0: one pass per register used there,
