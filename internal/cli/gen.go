@@ -395,6 +395,7 @@ func (oc *outcome) run(ctx context.Context, env Env, info io.Writer) error {
 	if imgs, err = validateImages(imgs); err != nil {
 		return err
 	}
+	noteFormat(info, oc.o.format, imgs)
 	oc.reportCost(info)
 	name := oc.o.name
 	if name == "" {
@@ -618,4 +619,23 @@ func emitJSON(w io.Writer, oc *outcome, err error, line int) error {
 	}
 	fmt.Fprintln(w, string(b))
 	return err
+}
+
+// noteFormat says so on stderr when the provider ignored -f: some backends
+// (Gemini) always return one format, and the file keeps its real type.
+func noteFormat(info io.Writer, format string, imgs []provider.Image) {
+	want := strings.ToLower(strings.TrimSpace(format))
+	if want == "" || len(imgs) == 0 {
+		return
+	}
+	if want == "jpg" {
+		want = "jpeg"
+	}
+	got := strings.TrimPrefix(strings.ToLower(imgs[0].MimeType), "image/")
+	if got == "jpg" {
+		got = "jpeg"
+	}
+	if got != want && got != "" {
+		fmt.Fprintf(info, "note: the provider returned %s; -f %s was not honored\n", strings.ToUpper(got), format)
+	}
 }

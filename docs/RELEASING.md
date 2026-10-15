@@ -23,7 +23,7 @@ Pick the version `X.Y.Z`. Work on `main` with a clean tree.
 5. Commit: `git commit -am "chore(release): vX.Y.Z"`.
 6. Tag: `git tag -a vX.Y.Z -m "imgen vX.Y.Z"`.
 7. Push the commit and tag: `git push origin main vX.Y.Z`. CI checks the changelog, builds, publishes the release and attests the artifacts. It fails if the tag has no changelog section.
-8. Open the release page. Check the title is `imgen vX.Y.Z`, the notes match the changelog, and all archives, checksums and SBOMs are attached.
+8. Open the release page. Check the title is `imgen vX.Y.Z` and all archives, checksums and SBOMs are attached. Run `scripts/check-release-notes.sh X.Y.Z` to confirm the notes match the changelog.
 9. Verify the attestation: `gh attestation verify imgen_X.Y.Z_linux_amd64.tar.gz --repo joshuafuller/imgen`.
 
 Preview the notes at any time: `scripts/release-notes.sh X.Y.Z`.
@@ -51,8 +51,12 @@ Needs `goreleaser`, `syft` and `gh` (logged in). Run from the tagged commit.
 
 ```sh
 export GITHUB_TOKEN="$(gh auth token)"
-goreleaser release --clean --release-notes <(scripts/release-notes.sh X.Y.Z)
+scripts/release-notes.sh X.Y.Z > /tmp/notes.md
+goreleaser release --clean --release-notes /tmp/notes.md
+scripts/check-release-notes.sh X.Y.Z --fix   # goreleaser has dropped the notes before
 ```
+
+Then download one archive from the release page, check it against the checksums file, and run `imgen version`: it must print `imgen X.Y.Z`.
 
 Local releases carry no build provenance attestation. For a dry run that publishes nothing:
 

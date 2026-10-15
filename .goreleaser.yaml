@@ -61,18 +61,10 @@ release:
 
     ```sh
     sha256sum --ignore-missing -c imgen_{{ .Version }}_checksums.txt
-    gh attestation verify imgen_{{ .Version }}_<os>_<arch>.tar.gz --repo joshuafuller/imgen
     ```
+
+    Each archive has an SPDX SBOM next to it. Releases built by CI also carry a build provenance attestation (`gh attestation verify <archive> --repo joshuafuller/imgen`).
 
     Full history: [CHANGELOG.md](https://github.com/joshuafuller/imgen/blob/v{{ .Version }}/CHANGELOG.md)
 
-# Formula-based "brews" is deprecated in goreleaser v2.10+; casks are the replacement (macOS only).
-homebrew_casks:
-  - name: imgen
-    repository:
-      owner: joshuafuller
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: https://github.com/joshuafuller/imgen
-    description: One CLI for every image model
-    skip_upload: auto
+# Homebrew: add a homebrew_casks section here once a joshuafuller/homebrew-tap repository exists.

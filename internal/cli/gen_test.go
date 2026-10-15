@@ -450,3 +450,19 @@ func TestEmbedDefaultsOmitPrompt(t *testing.T) {
 		t.Errorf("--no-embed %v", kv)
 	}
 }
+
+// A provider that ignores -f (Gemini returns JPEG for -f png) must say so on
+// stderr instead of silently saving another format.
+func TestFormatNotHonoredNote(t *testing.T) {
+	h, _ := pngHarness(t, 4, 4, color.White)
+	if c := h.run("gen", "-f", "jpeg", "-o", t.TempDir(), "cat"); c != 0 {
+		t.Fatalf("code %d: %s", c, h.errb.String())
+	}
+	if !strings.Contains(h.errb.String(), "-f jpeg was not honored") {
+		t.Errorf("no note on stderr: %q", h.errb.String())
+	}
+	h2, _ := pngHarness(t, 4, 4, color.White)
+	if c := h2.run("gen", "-f", "png", "-o", t.TempDir(), "cat"); c != 0 || strings.Contains(h2.errb.String(), "not honored") {
+		t.Errorf("matching format must not warn: %q", h2.errb.String())
+	}
+}

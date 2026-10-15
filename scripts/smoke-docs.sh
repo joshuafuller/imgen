@@ -115,7 +115,7 @@ BOOL_FLAGS = {"--last", "--enhance", "--json", "--meta", "--grid", "--no-embed",
               "--embed-prompt", "--quiet", "--dry-run", "--cache", "--force", "--open",
               "--preview", "--copy", "--notify", "--remove-bg", "--local", "--names",
               "--cost", "--denoise", "-h", "--help"}
-MAKERS = {"gen", "edit", "compare", "batch", "upscale"}
+MAKERS = {"gen", "edit", "compare", "batch", "upscale", "qr"}
 FREE_SUBS = {"doctor", "providers", "styles", "profiles", "history", "completion",
              "version", "help", "mcp"}
 SAMPLE_CONCEPT = "a satellite orbiting the earth"
@@ -351,7 +351,9 @@ def requests_of(sub, objs):
                 r = pr.get("result", {})
                 out.append((pr.get("provider"), r.get("provider"), r.get("request", {}), r.get("cost_usd", 0), r.get("cost_known", False)))
         elif "request" in o:
-            out.append((o.get("line"), o.get("provider"), o.get("request", {}), o.get("cost_usd", 0), o.get("cost_known", False)))
+            # qr reports the worst case over its -n tries as cost_usd_max
+            cost = o.get("cost_usd_max", o.get("cost_usd", 0))
+            out.append((o.get("line"), o.get("provider"), o.get("request", {}), cost, o.get("cost_known", False)))
     return out
 
 
