@@ -40,14 +40,15 @@ jobs:
         run: '"$(go env GOPATH)/bin/goreleaser" release --clean --release-notes dist-notes.md'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Verify release notes
-        # goreleaser has dropped the notes before; put the CHANGELOG notes back if so.
-        run: scripts/check-release-notes.sh "${GITHUB_REF_NAME#v}" --fix
-        env:
-          GH_TOKEN: ${{ github.token }}
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist/*.tar.gz
             dist/*.zip
             dist/*_checksums.txt
+      - name: Verify release notes
+        # goreleaser has dropped the notes before; put the CHANGELOG notes back if so.
+        # Runs after the attestation, so a notes problem never leaves a release unattested.
+        run: scripts/check-release-notes.sh "${GITHUB_REF_NAME#v}" --fix
+        env:
+          GH_TOKEN: ${{ github.token }}
