@@ -16,6 +16,12 @@ const MaxWrongPercent = 3
 // clearly wrong in a picture that passes. Phones read past one or two.
 const MaxPatternWrong = 2
 
+// MinContrast is the least mean light-minus-dark module difference (on a
+// 0-255 scale) a picture needs to pass. Every real result that scanned on a
+// phone measured 110 or more; a code drawn in two nearly equal grays can read
+// module for module against adaptive thresholds, yet no camera can read it.
+const MinContrast = 64
+
 // patternMargin is how far, as a share of the dark-light contrast, a pattern
 // module must read on the wrong side to count as wrong. A module just across
 // a threshold is a marginal read, which phones still get right.
@@ -29,10 +35,11 @@ type Grid struct {
 
 // Report is the result of Verify.
 type Report struct {
-	Modules int    // modules in the code
-	Wrong   int    // modules read as the wrong color
-	ByKind  [6]int // wrong modules by Kind
-	Grid    Grid   // where the modules were found
+	Modules  int     // modules in the code
+	Wrong    int     // modules read as the wrong color
+	Contrast float64 // mean light minus mean dark module, 0-255
+	ByKind   [6]int  // wrong modules by Kind
+	Grid     Grid    // where the modules were found
 }
 
 // Patterns returns the wrong modules of the finder, separator and timing
@@ -41,10 +48,12 @@ func (r Report) Patterns() int {
 	return r.ByKind[Finder] + r.ByKind[Separator] + r.ByKind[Timing]
 }
 
-// Pass reports whether the picture should scan: under MaxWrongPercent of
-// the modules wrong, and at most MaxPatternWrong pattern modules wrong.
+// Pass reports whether the picture should scan: at least MinContrast, under
+// MaxWrongPercent of the modules wrong, and at most MaxPatternWrong pattern
+// modules wrong.
 func (r Report) Pass() bool {
-	return r.Modules > 0 && r.Wrong*100 < r.Modules*MaxWrongPercent && r.Patterns() <= MaxPatternWrong
+	return r.Modules > 0 && r.Contrast >= MinContrast &&
+		r.Wrong*100 < r.Modules*MaxWrongPercent && r.Patterns() <= MaxPatternWrong
 }
 
 // Verify finds the module grid of c on im and counts the modules whose color
@@ -70,7 +79,7 @@ func Verify(im image.Image, c *Code) Report {
 	t := thresholds(samples, c.Size)
 	mid, contrast := split(samples)
 	margin := patternMargin * contrast
-	r := Report{Modules: n, Grid: g}
+	r := Report{Modules: n, Grid: g, Contrast: contrast}
 	for y := range c.Size {
 		for x := range c.Size {
 			v, dark, local := samples[y*c.Size+x], c.Dark(x, y), t[y*c.Size+x]

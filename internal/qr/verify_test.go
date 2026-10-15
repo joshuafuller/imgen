@@ -243,3 +243,28 @@ func TestVerifyDarkFinderRing(t *testing.T) {
 		t.Fatalf("dark finder ring: %+v, want 16 finder modules wrong and a fail", r)
 	}
 }
+
+// Daybreak v0.5: a code drawn in two nearly equal grays reads module for
+// module against adaptive thresholds, but no camera can read it. Pass needs a
+// minimum contrast.
+func TestVerifyRejectsLowContrast(t *testing.T) {
+	c := repoCode(t)
+	g := c.Image(8, QuietZone)
+	for i, v := range g.Pix {
+		if v < 128 {
+			g.Pix[i] = 127
+		} else {
+			g.Pix[i] = 128
+		}
+	}
+	r := Verify(g, c)
+	if r.Pass() {
+		t.Fatalf("a 127/128 code passed: contrast %.1f, wrong %d", r.Contrast, r.Wrong)
+	}
+	if r.Contrast >= MinContrast {
+		t.Errorf("contrast %.1f should be under MinContrast", r.Contrast)
+	}
+	if clean := Verify(c.Image(8, QuietZone), c); !clean.Pass() || clean.Contrast < 200 {
+		t.Errorf("a clean code must pass with high contrast: %+v", clean)
+	}
+}
