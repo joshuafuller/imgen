@@ -131,3 +131,63 @@ func TestInteractiveRejectsArgs(t *testing.T) {
 		t.Fatalf("code %d", c)
 	}
 }
+
+func TestInteractivePromptIsRedactedLikeGen(t *testing.T) {
+	const secret = "sk-test-abc123456789" // gitleaks:allow -- fake test value
+	t.Setenv("OPENAI_API_KEY", secret)
+	h := newHarness(t)
+	h.env.Getenv = func(k string) string {
+		if k == "OPENAI_API_KEY" {
+			return secret
+		}
+		return os.Getenv(k)
+	}
+	dir := t.TempDir()
+	mustRun(t, h, "gen", "-o", dir, "a fox "+secret)
+	withConsole(h, "a cat "+secret+"\r/quit\r")
+	if c := h.run("-i", "-o", dir); c != 0 {
+		t.Fatalf("code %d: %s", c, h.errb.String())
+	}
+	// Prompt and args only: the file name comes from the prompt slug, as in gen.
+	for _, e := range histEntries(t) {
+		if got := e.Prompt + " " + strings.Join(e.Args, " "); strings.Contains(got, secret) || !strings.Contains(got, redacted) {
+			t.Fatalf("history entry not redacted: %q", got)
+		}
+	}
+}
+
+func TestInteractiveFullPathWithFakeProvider(t *testing.T) {
+	h := newHarness(t)
+	tick(h)
+	h.f.nimg = 2
+	dir := t.TempDir()
+	con := withConsole(h, "/n 2\rfox\r2bluer\r1/undo\r\x03\x03")
+	if c := h.run("-i", "-o", dir); c != 0 {
+		t.Fatalf("code %d: %s", c, h.errb.String())
+	}
+	if con.restored == 0 {
+		t.Fatal("terminal not restored after Ctrl-C Ctrl-C")
+	}
+	if len(h.f.got) != 2 || h.f.got[0].N != 2 {
+		t.Fatalf("calls %+v", h.f.got)
+	}
+	es := histEntries(t)
+	if want := "-i " + filepath.Join(dir, "fox-2.png"); !strings.Contains(strings.Join(es[0].Args, " "), want) {
+		t.Fatalf("edit should use the picked variant (%s): %v", want, es[0].Args)
+	}
+	if !strings.Contains(h.errb.String(), "back to "+filepath.Join(dir, "fox-2.png")) {
+		t.Fatalf("/undo did not go back to the pick:\n%s", h.errb.String())
+	}
+}
+
+func TestInteractiveUsesCacheFromProfile(t *testing.T) {
+	h := newHarness(t)
+	withRules(h, `{"profiles":{"cached":{"cache":true}}}`)
+	withConsole(h, "fox\rnew: fox\r/quit\r")
+	if c := h.run("-i", "--profile", "cached", "-o", t.TempDir()); c != 0 {
+		t.Fatalf("code %d: %s", c, h.errb.String())
+	}
+	if len(h.f.got) != 1 {
+		t.Fatalf("provider calls %d, want 1 (second from the cache)", len(h.f.got))
+	}
+}
