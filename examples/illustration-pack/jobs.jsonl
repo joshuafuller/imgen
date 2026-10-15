@@ -1,0 +1,8 @@
+# One job per line: the file name and the subject. The shared style comes from --style, not from here.
+# Line 1 is the style anchor. make_pack.sh renders it first and passes it as -i to every other line.
+{"name":"empty-inbox","prompt":"an empty open inbox tray with one small paper airplane gliding above it and a few sparkles"}
+{"name":"no-results","prompt":"a magnifying glass hovering over a blank sheet of paper with a folded corner, with a few small floating dots"}
+{"name":"404","prompt":"a lonely signpost with three blank arrow signs pointing in different directions and a dotted path that ends in mid-air"}
+{"name":"offline","prompt":"a cloud with a diagonal slash across it and an unplugged power cable with a loose plug lying beside it"}
+{"name":"success","prompt":"a big rounded check mark inside a circle badge, surrounded by confetti and small stars"}
+{"name":"welcome","prompt":"a friendly open front door with warm light spilling out, a small potted plant on the step and a tiny waving hand above the door"}

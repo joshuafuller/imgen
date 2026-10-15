@@ -1,0 +1,6 @@
+{
+  "styles": {
+    "pack": "flat vector spot illustration for an app screen, soft rounded geometric shapes, dark indigo outlines of one even medium weight, limited palette of indigo, coral, warm yellow and pale sky blue with off-white highlights, no gradients, no shadows, no texture, one centered subject with generous empty space around it, no background scene, no text, no letters, no numbers, no logos",
+    "pack-ref": "match the reference image exactly in palette, outline thickness (the same thin outline on every shape and every small detail), corner roundness and level of detail, and draw the subject at about the same size as the reference subject, but draw a new subject and do not copy the reference subject or its layout"
+  }
+}
