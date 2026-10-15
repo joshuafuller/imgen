@@ -18,7 +18,20 @@ imgen gen -p gemini -r 2K -a 1:1 --remove-bg --name mascot \
   "a friendly orange robot mascot, full body"
 ```
 
-`--remove-bg` asks the model for a flat `#00FF00` background, keys it out, and saves a PNG. Avoid green subjects. If the edges show a green fringe, use OpenAI `-b transparent` instead. Images over 20 megapixels are refused; add `--resize` to shrink them first.
+`--remove-bg` asks the model for a flat magenta `#FF00FF` background, keys it out, and saves a PNG. Games rarely use magenta, so green subjects are safe. For a pink or purple subject, use `--remove-bg=green`. If the edges show a colored fringe, use OpenAI `-b transparent` instead. Images over 20 megapixels are refused; add `--resize` to shrink them first.
+
+## Pixel art in one palette
+
+```sh
+imgen gen -p gemini -r 1K -a 1:1 --remove-bg --cache --name hero \
+  "16-bit pixel art game sprite of a forest ranger, full body, facing the viewer, no shadow, no text"
+imgen gen -p gemini -r 1K -a 1:1 --remove-bg --cache --pixel 96 --palette hero.png --name hero-px \
+  "16-bit pixel art game sprite of a forest ranger, full body, facing the viewer, no shadow, no text"
+imgen edit -p gemini -r 1K -a 1:1 --remove-bg --cache --pixel 96 --palette hero.png \
+  -i hero.png --name hero-back "the same character seen from behind, same pixel size, no shadow, no text"
+```
+
+Models draw "pixel art" with uneven pixels and too many colors. The first call makes a full-size cutout: the anchor. The second is the same request, so `--cache` reuses the paid image at no cost and only adds `--pixel 96`: a true 96-pixel-tall grid with hard edges, in the anchor's colors. The third gives the anchor as a reference and maps the result to the same palette, so a set of sprites shares one palette. [`examples/sprite/`](../examples/sprite/) builds a walk cycle this way.
 
 ## Logo or concept variants
 

@@ -3,7 +3,7 @@
 It speaks enough of the Gemini, OpenAI, Recraft and Replicate APIs for imgen's
 real client code, and returns real images made with Pillow: the requested size
 or aspect ratio, the requested format, a clear background when one is asked
-for, a flat #00FF00 background when the prompt asks for a chroma key, and n
+for, a flat #FF00FF or #00FF00 background when the prompt asks for that chroma key, and n
 images. The colors come from a hash of the prompt (and of the input images),
 so each edit and each step of a chain gives a different file. An edit keeps
 the light and dark layout of its first input, so QR code art still scans.
@@ -80,23 +80,28 @@ def rgb(h, s, v):
     return tuple(int(c * 255) for c in colorsys.hsv_to_rgb(h % 1.0, s, v))
 
 
-def palette(seed, green):
-    """Dark, light and accent colors from a hash. With green (a chroma-key
-    background), hues stay in magenta-red-orange, far from #00FF00."""
+GREEN, MAGENTA = (0, 255, 0), (255, 0, 255)
+
+
+def palette(seed, screen):
+    """Dark, light and accent colors from a hash. On a chroma-key screen, hues
+    stay far from it: magenta-red-orange on green, green-cyan on magenta."""
     h = seed[0] / 255
-    if green:
+    if screen == GREEN:
         h = 0.85 + h * 0.25
-    accent_h = h + (0.08 if green else 0.5)
+    elif screen == MAGENTA:
+        h = 0.20 + h * 0.30
+    accent_h = h + (0.08 if screen else 0.5)
     return rgb(h, 0.65, 0.22), rgb(h + 0.05, 0.22, 0.96), rgb(accent_h, 0.75, 0.9)
 
 
-def scene(w, h, seed, green, clear):
-    dark, light, accent = palette(seed, green)
+def scene(w, h, seed, screen, clear):
+    dark, light, accent = palette(seed, screen)
     r = max(min(w, h) // 5, 4)
     cx = r + seed[1] * max(w - 2 * r, 1) // 255
     cy = r + seed[2] * max(h // 2 - r, 1) // 255
-    if green or clear:
-        im = Image.new("RGBA", (w, h), (0, 255, 0, 255) if green else (0, 0, 0, 0))
+    if screen or clear:
+        im = Image.new("RGBA", (w, h), screen + (255,) if screen else (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
         d.rounded_rectangle([w // 4, h // 3, 3 * w // 4, 5 * h // 6], radius=max(r // 3, 1), fill=dark + (255,))
         d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=accent + (255,), outline=light + (255,), width=max(r // 12, 1))
@@ -110,16 +115,16 @@ def scene(w, h, seed, green, clear):
     return im
 
 
-def edited(inputs, w, h, seed, green, clear):
+def edited(inputs, w, h, seed, screen, clear):
     """A duotone of the first input (its layout survives, so a QR code still
     scans), with the other inputs as thumbnails in a corner."""
-    dark, light, accent = palette(seed, green)
+    dark, light, accent = palette(seed, screen)
     try:
         src = Image.open(io.BytesIO(inputs[0]))
         src.load()
     except Exception:  # noqa: BLE001 - a bad input still gets an image back
-        return scene(w, h, seed, green, clear)
-    inner = (w * 3 // 4, h * 3 // 4) if green else (w, h)
+        return scene(w, h, seed, screen, clear)
+    inner = (w * 3 // 4, h * 3 // 4) if screen else (w, h)
     im = ImageOps.colorize(ImageOps.fit(src.convert("L"), inner), dark, light).convert("RGBA")
     for k, extra in enumerate(inputs[1:4]):
         try:
@@ -129,8 +134,8 @@ def edited(inputs, w, h, seed, green, clear):
         t.thumbnail((inner[0] // 4, inner[1] // 4))
         im.alpha_composite(t, (inner[0] - (k + 1) * (inner[0] // 4 + 8), inner[1] - t.size[1] - 8))
     ImageDraw.Draw(im).rectangle([0, 0, inner[0] - 1, inner[1] - 1], outline=accent + (255,), width=max(min(inner) // 128, 1))
-    if green:
-        out = Image.new("RGBA", (w, h), (0, 255, 0, 255))
+    if screen:
+        out = Image.new("RGBA", (w, h), screen + (255,))
         out.alpha_composite(im, ((w - inner[0]) // 2, (h - inner[1]) // 2))
         return out
     if clear:
@@ -148,9 +153,10 @@ def render(prompt, w, h, fmt, clear, inputs, salt):
     for data in inputs:
         digest.update(hashlib.sha256(data).digest())
     seed = digest.digest()
-    green = "#00ff00" in prompt.lower()
+    low = prompt.lower()
+    screen = GREEN if "#00ff00" in low else MAGENTA if "#ff00ff" in low else None
     clear = clear and fmt != "jpeg"
-    im = edited(inputs, w, h, seed, green, clear) if inputs else scene(w, h, seed, green, clear)
+    im = edited(inputs, w, h, seed, screen, clear) if inputs else scene(w, h, seed, screen, clear)
     buf = io.BytesIO()
     if fmt == "jpeg":
         im.convert("RGB").save(buf, "JPEG", quality=90)

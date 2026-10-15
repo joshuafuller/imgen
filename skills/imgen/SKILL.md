@@ -38,7 +38,8 @@ Run `scripts/check_setup.sh` (it wraps `imgen doctor`). It reports whether `imge
 | Real SVG / vector output | `recraft` (if its key is set) | `-f svg` |
 | FLUX or any hosted model | `bfl`, `replicate`, `fal` | `-m <model id>` |
 | Local GPU / private data | a configured local instance | `-p <name>` |
-| Transparent PNG from Gemini | `gemini` | `--remove-bg` (green-screen key) |
+| Transparent PNG from Gemini | `gemini` | `--remove-bg` (magenta key; `=green` for pink subjects) |
+| Pixel art in one palette | any | `--pixel 96 --palette hero.png` |
 | Exact deliverable size | any | `--resize 3840x2160` |
 | Grain or speckle in the result | any | `--denoise[=light\|medium\|strong]` |
 | 5120x1440 wallpaper | any (best local) | `--profile wallpaper -p <name>` |

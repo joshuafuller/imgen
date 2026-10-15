@@ -34,7 +34,7 @@ Check the alpha channel: with PIL, `Image.open(p).getchannel('A').getextrema()` 
 imgen gen -p gemini -r 2K -a 1:1 --remove-bg --name mascot "friendly robot mascot, full body"
 ```
 
-`--remove-bg` asks for a flat #00FF00 background, keys it out, and saves a PNG. Keep the prompt short and the subject plain: with a busy photo or a long prompt, Gemini can keep part of the scene or fail with `chroma key: image corners are not green` (billed anyway). Add `--cache`: the raw result is cached before keying, so a failed key does not lose the paid image. The key color comes from the corners, so one corner on a table can pass a bad cutout (one came out 94% opaque); look at the result on a dark background, not only at its alpha. Avoid green subjects. If edges show a fringe or a dark line, use OpenAI `-b transparent`.
+`--remove-bg` asks for a flat magenta #FF00FF background (`--remove-bg=green` for pink or purple subjects), keys it out, and saves a PNG. A transparent `-i` input is put on the same screen before it is sent. Keep the prompt short and the subject plain: with a busy photo or a long prompt, Gemini can keep part of the scene or fail with `chroma key: image corners are not magenta` (billed anyway). Add `--cache`: the raw result is cached before keying, so a failed key does not lose the paid image. The key color comes from the corners, so one corner on a table can pass a bad cutout (one came out 94% opaque); look at the result on a dark background, not only at its alpha. If edges show a fringe or a dark line, use OpenAI `-b transparent`.
 
 ## Logo or concept variants
 
@@ -145,7 +145,11 @@ imgen draws an exact level-H QR code, Gemini repaints it as the scene, and imgen
 
 ## Animated game character
 
-Image models cannot make smooth frames; use a video model for the motion. Run the scripts from a clone of the repo:
+Two paths; both are in the repo's `examples/sprite/`.
+
+**Images only (all imgen, about $0.50 on Gemini):** (1) one hero cutout: `gen -n 2 --remove-bg --cache`, the user picks one = `hero.png`, the anchor; (2) all directions in ONE turnaround call: `edit -a 16:9 --remove-bg --cache -i hero.png "turnaround sheet: front, side facing right, back, same height..."`, then `frames.py split` (one view per call failed: "facing right" kept the front pose); (3) one pose per call: `edit -a 1:1 --remove-bg --cache --pixel 96 --palette hero.png -i hero.png -i views/right.png "...walking. Pose, contact: ..."`, always with the anchor (anchor, never chain), never "feet on one ground line" (the model draws a line); (4) `frames.py loop` puts the feet on one baseline and the torso on one x, and writes the sheet, a TexturePacker atlas and GIFs. Same `-r`/`-a` for every pose, so `--pixel` gives one scale. Weak spot: the two contact poses look alike (no near or far leg); use the video path for real leg motion.
+
+**Video (smooth motion):** image models cannot make smooth frames; a video model draws the motion. Run the scripts from a clone of the repo:
 
 ```text
 imgen gen -p openai -q high -r 1024x1024 -b transparent -f png --name hero "pixel-art knight, side view facing right, full body, no background, no text"

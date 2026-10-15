@@ -14,7 +14,7 @@ Worked, end-to-end examples. Each folder has a README with the exact steps, a sc
 | [VTT tokens](vtt-tokens/) | Character portraits as round, transparent tabletop tokens with name plates |
 | [QR posters](qr-posters/) | Event posters with a scannable art QR code, at A4 and US Letter, as PNG and PDF |
 | [Game assets](game-assets/) | An item-icon sheet sliced into icons, a seamless tile, portraits and an atlas |
-| [Sprite animation](sprite/) | One character into a seamless walk loop (pixel art or smooth), with a sheet and an atlas |
+| [Sprite animation](sprite/) | One character into a walk loop: images only (a turnaround, one pose per call, pixel art in the hero's palette) or a video (smooth motion), with a sheet and an atlas |
 | [ComfyUI plugin](comfyui/) | Run imgen against a local ComfyUI workflow through the exec plugin protocol |
 
 The top-level files `echo-plugin.py` (a test double for the plugin protocol) and `rules.json` (sample provider instances) support [Extending](../docs/extending.md).

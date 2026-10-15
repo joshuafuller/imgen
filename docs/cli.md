@@ -88,14 +88,17 @@ The prompt can be words, `-P file`, or `-` to read stdin. Flags may come before 
 
 ### Post-processing flags
 
-These run on every output image, in this order: denoise, remove-bg, crop, resize.
+These run on every output image, in this order: denoise, remove-bg, crop, pixel, resize.
 
 | Flag | Meaning |
 |---|---|
 | `--denoise[=level]` | Reduce grain and speckle with an edge-preserving filter. Levels: `light` (the default for a bare `--denoise`), `medium`, `strong`. A level needs the `=` form. |
-| `--remove-bg` | Ask the model for a flat `#00FF00` background, then key it out to an alpha PNG. Refuses images over 20 megapixels; add `--resize` to shrink first. |
+| `--remove-bg[=screen]` | Ask the model for a flat screen color, then key it out to an alpha PNG. Screens: `magenta` (`#FF00FF`, the default for a bare `--remove-bg`; games rarely use it), `green` (`#00FF00`, for pink or purple subjects). A screen needs the `=` form. Input images with transparent pixels are put on the same screen color before they are sent. Refuses images over 20 megapixels; add `--resize` to shrink first. |
 | `--crop x,y,w,h` | Crop the output. Width and height must be above 0. |
-| `--resize WxH[:mode]` | Exact output size. Modes: `fill` (default; cover and center-crop), `fit`, `stretch`. |
+| `--pixel H` | Turn the image into pixel art `H` pixels tall (PNG): each pixel is the area average of the part it covers (a clear background never tints the edges), is fully opaque or fully clear, and takes the nearest palette color. Images of the same size shrink by the same amount, so frames keep one scale. |
+| `--colors N` | With `--pixel`: the palette size, picked from the image's own colors by median cut. Default 24. |
+| `--palette FILE` | With `--pixel`: use the colors of this image instead, so every image of a set shares one palette. A file with 256 colors or fewer (a swatch, or art that is already pixel art) gives exactly its colors; a larger one gives `--colors` colors by median cut. Clear pixels do not count. |
+| `--resize WxH[:mode]` | Exact output size. Modes: `fill` (default; cover and center-crop), `fit`, `stretch`. After `--pixel`, it samples nearest-neighbor, so the pixels stay sharp. |
 
 ### Embedded metadata
 

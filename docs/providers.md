@@ -25,7 +25,7 @@ imgen doctor         # which keys are set (never prints keys)
 | `fal` | `FAL_KEY` | `fal-ai/flux/dev` | yes | sent as `mask_url` | no | `-r WxH` or `-a` |
 | `higgsfield` | `HIGGSFIELD_API_KEY` + `HIGGSFIELD_API_SECRET` | `higgsfield-ai/soul/v2/standard` | depends on model | no | no | `-r 1K\|2K`, `-a` |
 
-"Transparency" means a flag that asks the model for an alpha channel. For any provider you can still use `--remove-bg`, which asks for a green background and keys it out. See the [CLI reference](cli.md).
+"Transparency" means a flag that asks the model for an alpha channel. For any provider you can still use `--remove-bg`, which asks for a flat magenta background (or green, with `--remove-bg=green`) and keys it out. See the [CLI reference](cli.md).
 
 Keys go in your shell or in the private key file described in [Configuration](configuration.md). To read a key from a different variable, set `api_key_env` on the instance in your rules file.
 

@@ -70,9 +70,12 @@ Each short flag also has a long name: `-p --provider`, `-m --model`, `-r --resol
 | `--seed N` | repeatable output | Gemini and exec; others ignore it |
 | `--mask m.png` | masked edit (needs `-i`) | OpenAI, Ideogram, Recraft, BFL, Replicate, fal; Gemini, Codex and Higgsfield return "not supported by this provider: mask" |
 | `--denoise[=light\|medium\|strong]` | remove grain and speckle | edge-preserving, pure Go; bare flag = `light`; level needs `=`; runs first |
-| `--remove-bg` | green-screen cutout to an alpha PNG | asks for a #00FF00 background and keys it out |
+| `--remove-bg[=green]` | cutout to an alpha PNG | asks for a flat magenta #FF00FF background (green #00FF00 with `=green`) and keys it out; transparent `-i` inputs are put on that screen first |
 | `--crop x,y,w,h` | crop the output | runs after remove-bg |
-| `--resize WxH[:fit\|fill\|stretch]` | exact output size | default `fill` (cover + center crop); runs last (after denoise, remove-bg and crop) |
+| `--pixel H` | real pixel art H pixels tall (PNG) | area average with no background bleed, hard alpha, a palette; same-size images shrink by the same amount |
+| `--colors N` | palette size for `--pixel` | default 24, median cut of the image's colors |
+| `--palette FILE` | lock `--pixel` to an image's colors | a swatch (256 colors or fewer) is used as is; else `--colors` by median cut |
+| `--resize WxH[:fit\|fill\|stretch]` | exact output size | default `fill` (cover + center crop); runs last (after denoise, remove-bg, crop and pixel); nearest-neighbor after `--pixel` |
 
 ## JSON output (`--json`)
 
