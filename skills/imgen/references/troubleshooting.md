@@ -10,7 +10,7 @@ Run `imgen doctor` first. It checks the binary, the key file, each provider inst
 | `unknown provider "x"` (exit 2), maybe with `Did you mean "..."?` | no such instance, or a typo | use the suggestion; `imgen providers`; add it to the rules file |
 | `HTTP 400 ... size` | size not valid for the model | OpenAI: `1024x1024`, `1536x1024`, `1024x1536`, `auto`. Gemini: `1K`/`2K`/`4K` with `-a` |
 | `HTTP 404` / model not found | wrong or retired model ID | `imgen models -p <provider>`; or `-m latest` |
-| `HTTP 429` or 5xx after retries | rate limit or outage | imgen already retried (`IMGEN_RETRIES`, default 3); wait, lower `-n`, or switch provider |
+| `HTTP 429` or 5xx after retries | rate limit or outage | imgen already retried (`IMGEN_RETRIES`, default 3); wait, lower `-n`, or switch provider. A streamed OpenAI call is not retried: rerun or add `--no-stream` |
 | blocked / `finishReason: SAFETY` / `blockReason` | safety filter | reword; remove real people, brands, violence; try the other provider |
 | no images, only text | model answered in words | make the prompt an explicit image request ("Generate an image of ..."); Gemini sometimes needs that |
 | `codex: no images generated` | Codex did not call its image tool, or is not logged in | `codex login`; retry; check the stderr tail |

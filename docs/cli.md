@@ -210,7 +210,7 @@ OpenAI bills each partial image as 100 extra image output tokens. For `gpt-image
 
 - `--no-stream` turns it off for one call. `IMGEN_STREAM=off` turns it off for all calls and sessions.
 - imgen does not stream with `-n` above 1, with DALL-E models, with a custom `base_url`, in `batch` and `compare`, or in the MCP server.
-- If the stream cannot start, imgen makes the normal call. If OpenAI refuses to stream (for example, the organization is not verified), imgen does not ask again until the process ends.
+- If OpenAI refuses to stream (for example, the organization is not verified), imgen makes the normal call and does not ask again until the process ends. Any other failure of a streamed call is an error with no automatic retry, because OpenAI may already have billed it: retry, or use `--no-stream`.
 
 ## interactive
 
@@ -405,7 +405,7 @@ On an error, stdout gets `{"ok":false,"error":"...","exit":1}` (plus `line` in `
 | `GEMINI_BASE_URL`, `OPENAI_BASE_URL` | Endpoint override for the built-in `gemini` and `openai` instances, when the rules file sets no `base_url`. With `OPENAI_BASE_URL` set, the built-in `openai` instance sends `OPENAI_API_KEY` there if it is set; see [Providers](providers.md#openai). |
 | `IMGEN_ENV_FILE` | Key file. Default `~/.config/imgen/env`. Must not be readable by group or others. |
 | `IMGEN_RULES` | Rules file. Default `~/.config/imgen/rules.json`. |
-| `IMGEN_RETRIES` | Attempts for HTTP 429 and 5xx. Default `3`, with backoff. |
+| `IMGEN_RETRIES` | Attempts for HTTP 429 and 5xx. Default `3`, with backoff. Streamed OpenAI calls are not retried. |
 | `IMGEN_PRICES` | JSON file that overrides the built-in price table. |
 | `IMGEN_BUDGET` | Spending limit in USD per local day. See [Configuration](configuration.md#daily-budget). |
 | `IMGEN_HISTORY` | `off` stops recording the history. |

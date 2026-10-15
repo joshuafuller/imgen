@@ -40,6 +40,7 @@ painting on OpenAI, and `imgen qr` for QR code art that still scans.
 - **MCP:** The server refuses `-` for images, mask and output directory, so a tool call can never read stdin or write stdout, which carry the protocol. ([`04bf559`](https://github.com/joshuafuller/imgen/commit/04bf5593c57af3c2ef18fcf78821d05c4b8b8d4d))
 - **CLI:** Streamed partial images are priced before the budget hold, so spend is never undercounted. ([`36c20da`](https://github.com/joshuafuller/imgen/commit/36c20daf53e91653e4f8213ec37d957c2994f492)) ([`5cc9c17`](https://github.com/joshuafuller/imgen/commit/5cc9c1745c22d16fd3d744c1a8e44eda6f9d3ed9))
 - **Providers:** Every streamed partial is size-checked before it is decoded, and a refusal to stream is remembered instead of retried. ([`47b2ffb`](https://github.com/joshuafuller/imgen/commit/47b2ffbcff368662e49607c96fb9e102b48f952a)) ([`5cc9c17`](https://github.com/joshuafuller/imgen/commit/5cc9c1745c22d16fd3d744c1a8e44eda6f9d3ed9))
+- **Providers:** A failed OpenAI stream (network error, 408, 429 or 5xx) is never followed by a second paid request; only an explicit refusal to stream falls back. ([`54acf2a`](https://github.com/joshuafuller/imgen/commit/54acf2a8a25d12a2a0a34c754ed3768faaff986c))
 
 ## [0.4.0] - 2026-10-15
 

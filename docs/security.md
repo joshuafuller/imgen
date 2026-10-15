@@ -74,7 +74,7 @@ This opt-in applies only to input URLs. URL inputs are not available through the
 | SVG document | 10 MiB |
 | Width or height | 16384 pixels |
 | Width x height | `IMGEN_MAX_PIXELS`, default 40,000,000 (8K UHD fits) |
-| Retries | `IMGEN_RETRIES` attempts on 429, 500, 502, 503, 504 and network errors, default 3. `Retry-After` in seconds is honoured. |
+| Retries | `IMGEN_RETRIES` attempts on 429, 500, 502, 503, 504 and network errors, default 3. `Retry-After` in seconds is honoured. A streamed OpenAI call is never retried, so a failure cannot cause a second paid request. |
 
 For API responses and image downloads, a larger `Content-Length` is refused before the body is read. The pixel limit applies to inputs, masks, provider output, cache reads and post-processing.
 

@@ -127,7 +127,7 @@ New API options therefore work with no imgen update.
 | `GEMINI_BASE_URL`, `OPENAI_BASE_URL` | endpoint override for built-in instances |
 | `IMGEN_RULES` | rules file path (default `~/.config/imgen/rules.json`) |
 | `IMGEN_ENV_FILE` | key file (default `~/.config/imgen/env`, must be mode 600; imgen loads it itself) |
-| `IMGEN_RETRIES` | attempts for 429/5xx (default 3, with backoff and Retry-After) |
+| `IMGEN_RETRIES` | attempts for 429/5xx (default 3, with backoff and Retry-After); streamed OpenAI calls are not retried |
 | `IMGEN_PRICES` | JSON file that overrides the built-in price table |
 | `IMGEN_PREVIEW` | `off`, `auto` (default: inline only with kitty/iTerm2/sixel) or `always` (like `--preview`) |
 | `IMGEN_STREAM` | `off` turns off live partial pictures (gen, edit, interactive) |
