@@ -28,13 +28,11 @@ You need `imgen` with a Gemini key and `uv`. The sample made nine Gemini 1K imag
    uv run --with pillow --with numpy python -I frames.py split turnaround.png views --names front,right,back
    ```
 
-3. Make each walk pose in its own call, with the hero and the side view as references, as pixel art in the hero's palette (repeat for the other three poses, with `--name walk2` to `walk4`):
+3. Make the four walk poses, one job each, in one batch. Every job gets the hero and the side view as references and comes out as pixel art in the hero's palette. [`walk-jobs.jsonl`](walk-jobs.jsonl) holds the four pose prompts (contact, passing, the other contact, the other passing):
 
    ```text
-   imgen edit -p gemini -r 1K -a 1:1 --remove-bg --cache --pixel 96 --palette hero.png -i hero.png -i views/right.png --name walk1 "The character from the first image, seen from the side facing right exactly as in the second image, walking. Pose, contact: her front leg forward with the heel on the ground, her back leg behind on its toes, the arms swinging opposite to the legs. Same design, outfit, colors, proportions, dark outline and pixel size, the same scale as the second image, full body, centered. 16-bit pixel art, no shadow, no ground, no ground line, no text."
+   imgen batch -j 4 -p gemini -r 1K -a 1:1 --remove-bg --cache --pixel 96 --palette hero.png -i hero.png -i views/right.png walk-jobs.jsonl
    ```
-
-   The other poses: "passing: the leg nearest the viewer straight under her body, the far leg lifted and passing forward with the knee bent, the body a little higher"; "contact: the far leg forward with the heel on the ground, the leg nearest the viewer behind on its toes, the arms swinging opposite to the legs"; "passing: the far leg straight under her body, the leg nearest the viewer lifted and passing forward with the knee bent, the body a little higher".
 
 4. Line the frames up and make the loop (free):
 
