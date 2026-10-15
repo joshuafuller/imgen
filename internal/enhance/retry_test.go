@@ -50,6 +50,13 @@ func code(n int) step {
 	}
 }
 
+// limited answers 429 with a Retry-After of 7 seconds.
+func limited(_ *testing.T, w http.ResponseWriter) {
+	w.Header().Set("Retry-After", "7")
+	w.WriteHeader(http.StatusTooManyRequests)
+	_, _ = io.WriteString(w, `{"error":{"message":"busy"}}`)
+}
+
 // reply answers 200 with body.
 func reply(body string) step {
 	return func(_ *testing.T, w http.ResponseWriter) { _, _ = io.WriteString(w, body) }
@@ -153,16 +160,21 @@ func TestPaidCallNotRetried(t *testing.T) {
 	}
 }
 
-// A 429 means the provider refused the call without running or billing it, so
-// a paid call is retried after it.
-func TestPaidCallRetriedAfter429(t *testing.T) {
+// A 429 does not prove that the provider did not run and bill the call, so
+// a paid call is not retried after it either. The error says when to run it
+// again.
+func TestPaidCallNotRetriedAfter429(t *testing.T) {
 	threeAttempts(t)
-	out, hits, err := geminiCall.prompt(t, code(429), geminiCall.ok)
-	if err != nil || out != cube {
-		t.Fatalf("out %q err %v", out, err)
-	}
-	if n := hits(geminiGenerate); n != 2 {
-		t.Fatalf("%s got %d requests, want 2", geminiGenerate, n)
+	for _, c := range []paidCall{geminiCall, openaiCall} {
+		t.Run(c.path, func(t *testing.T) {
+			_, hits, err := c.prompt(t, limited, c.ok)
+			if n := hits(c.path); n != 1 {
+				t.Errorf("%s got %d requests, want 1", c.path, n)
+			}
+			if !errors.Is(err, errStatus) || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("7")) {
+				t.Fatalf("err %v, want the 429 status error, ending with the rate hint", err)
+			}
+		})
 	}
 }
 

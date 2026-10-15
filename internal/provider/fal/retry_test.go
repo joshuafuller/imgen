@@ -69,6 +69,9 @@ func flaky(t *testing.T, faults map[string][]int) (*Client, func(path string) in
 			case cutOff:
 				cutBody(w)
 			default:
+				if fs[n] == http.StatusTooManyRequests {
+					w.Header().Set("Retry-After", "7")
+				}
 				w.WriteHeader(fs[n])
 				_, _ = w.Write([]byte(`{"detail":"fault"}`))
 			}
@@ -145,14 +148,16 @@ func TestPaidSubmitServerErrorNotRetried(t *testing.T) {
 	}
 }
 
-func TestPaidSubmitRetriedAfter429(t *testing.T) {
+// A 429 is not retried either: the provider controls the status, so it does
+// not prove that the submit was not billed. The error says when to run it again.
+func TestPaidSubmit429NotRetried(t *testing.T) {
 	c, count := flaky(t, map[string][]int{submitPath: {http.StatusTooManyRequests}})
-	res, err := generate(c)
-	if err != nil || len(res.Images) != 1 {
-		t.Fatalf("res=%+v err=%v", res, err)
+	_, err := generate(c)
+	if n := count(submitPath); n != 1 {
+		t.Errorf("submit requests = %d, want 1: a request that can bill is never sent twice", n)
 	}
-	if n := count(submitPath); n != 2 {
-		t.Errorf("submit requests = %d, want 2: a 429 was refused without billing, so it is retried", n)
+	if !errors.Is(err, errHTTPStatus) || !strings.HasSuffix(err.Error(), ". "+httpx.RateHint("7")) {
+		t.Fatalf("err = %v, want the 429 status error, ending with the rate hint", err)
 	}
 }
 

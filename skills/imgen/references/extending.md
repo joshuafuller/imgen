@@ -76,7 +76,7 @@ The plugin prints one JSON object to stdout:
 Add `internal/provider/<type>/` with a `Client` that implements `provider.Provider` (`Name`, `Generate`, `ListModels`). Then:
 
 - Call `provider.Register("<type>", factory)` in `init()`. The factory reads `cfg.BaseURL`, and the key from `os.Getenv(cfg.APIKeyEnv)` or a default var.
-- Send every HTTP call through `httpx.Send`: `httpx.PaidPolicy()` for a request that can bill (it retries only a 429; append `pol.Hint(status)` to its status error), `httpx.DefaultPolicy()` for polls and lists, and `httpx.ImagePolicy()` for downloads.
+- Send every HTTP call through `httpx.Send`: `httpx.PaidPolicy()` for a request that can bill (it makes no retries, 429 included; send it with `httpx.SendHint` and append the hint to its status error), `httpx.DefaultPolicy()` for polls and lists, and `httpx.ImagePolicy()` for downloads.
 - Return `fmt.Errorf("%w: mask", provider.ErrUnsupported)` for any feature the backend lacks.
 - Blank-import the package in `cmd/imgen/main.go`, and add a default instance to `internal/rules/rules.json`.
 - Write tests with `httptest` only. Run `make check` before you commit.

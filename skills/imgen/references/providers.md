@@ -39,7 +39,7 @@ Model IDs change often. Run `imgen models -p <provider>` for the live list. The 
 
 ## Extra API providers
 
-These backends are tested against fake servers. A live test needs that provider's key. All retry a 429; downloads and polls also retry 5xx and network errors. All support `--set` pass-through.
+These backends are tested against fake servers. A live test needs that provider's key. None retries a call that can bill, 429 included; downloads and polls retry 429, 5xx and network errors. All support `--set` pass-through.
 
 | Instance | Key | Default model | Best for | Notes |
 |---|---|---|---|---|

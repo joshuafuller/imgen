@@ -74,7 +74,7 @@ This opt-in applies only to input URLs. URL inputs are not available through the
 | SVG document | 10 MiB |
 | Width or height | 16384 pixels |
 | Width x height | `IMGEN_MAX_PIXELS`, default 40,000,000 (8K UHD fits) |
-| Retries | A request that can bill (generate, edit, submit, prompt rewrite) is retried only after a 429, up to `IMGEN_RETRIES` attempts (default 3), honoring `Retry-After` in seconds. After a network error, 408 or 5xx it is not sent again, because the provider may have billed it. Downloads, status polls and model lists are also retried on 5xx and network errors. A streamed OpenAI call is never retried. |
+| Retries | imgen never sends a request that can bill (generate, edit, submit, prompt rewrite) twice, whatever the answer. The provider controls the status it returns, so not even a 429 proves that it did not run and bill the request. After a 429 the error says when to run it again (from `Retry-After` in seconds); after a network error, 408 or 5xx it says that the provider may have billed it. Only downloads, status polls and model lists are retried, after a 429, 5xx or network error, up to `IMGEN_RETRIES` attempts (default 3). A streamed OpenAI call is never retried, and a refusal to stream is an error, not a second, plain call. A Higgsfield submit carries an `Idempotency-Key`, so Go's HTTP client may send it again on a reused connection that broke before the answer; Higgsfield documents that a repeat with the same key does not create or charge for another generation. |
 
 For API responses and image downloads, a larger `Content-Length` is refused before the body is read. The pixel limit applies to inputs, masks, provider output, cache reads and post-processing.
 
@@ -121,6 +121,7 @@ See [Extending](extending.md) for plugin details.
 |---|---|---|
 | History | `$XDG_STATE_HOME/imgen/history.jsonl`, else `~/.local/state/imgen/history.jsonl` | File mode 0600, folder 0700. Keys removed. |
 | Budget ledger | `budget.jsonl` beside the history, used when `IMGEN_HISTORY=off` and `IMGEN_BUDGET` is set | Mode 0600. Cost only: no prompt, arguments, files or error text. |
+| Stream refusals | `openai-stream-refused` beside the history: one line for each OpenAI key and endpoint that OpenAI refused to stream | File mode 0600, folder 0700. A SHA-256 hash only, never the key or the URL. Delete the file to stream again. |
 | `--meta` sidecars | `<image>.json` next to each image | Mode 0600, created new (never overwrites). Keys removed. |
 | Cache | `$XDG_CACHE_HOME/imgen`, else `~/.cache/imgen`. Used only with `--cache`. | Folder 0700, files 0600. |
 | Generated images | Your output folder | Mode 0644, so others on the machine can read them. |

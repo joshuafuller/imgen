@@ -53,6 +53,13 @@ func code(n int) step {
 	}
 }
 
+// limited answers 429 with a Retry-After of 7 seconds.
+func limited(_ *testing.T, w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Retry-After", "7")
+	w.WriteHeader(http.StatusTooManyRequests)
+	_, _ = w.Write([]byte("busy"))
+}
+
 // ok answers with what the endpoint sends when the request works.
 func ok(_ *testing.T, w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
@@ -120,25 +127,26 @@ func TestRetryPaidNetworkError(t *testing.T) {
 	}
 }
 
-// A 408 or a 5xx may mean the provider billed the submit, so it is not retried
-// and the error says so. Other statuses carry no hint.
+// The submit is sent once, whatever the status. After a 408 or a 5xx the
+// provider may have billed it, and the error says so; after a 429 the error
+// says when to run it again. Other statuses carry no hint.
 func TestRetryPaidStatus(t *testing.T) {
 	tests := []struct {
 		name  string
 		steps []step // answers from the submit endpoint
-		calls int    // requests that reach the submit endpoint
-		hints int    // times the error carries the hint
+		hints int    // times the error carries PaidHint
+		end   string // the end of the error
 	}{
-		{"503 is not retried", []step{code(http.StatusServiceUnavailable), ok}, 1, 1},
-		{"400 has no hint", []step{code(http.StatusBadRequest), ok}, 1, 0},
-		{"429 is retried and has no hint", []step{code(http.StatusTooManyRequests)}, 3, 0},
+		{"503 is not retried", []step{code(http.StatusServiceUnavailable), ok}, 1, ". " + httpx.PaidHint},
+		{"400 has no hint", []step{code(http.StatusBadRequest), ok}, 0, "busy"},
+		{"429 is not retried", []step{limited, ok}, 0, ". " + httpx.RateHint("7")},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c, count := scripted(t, map[string][]step{submitPath: tc.steps, pollPath: {ok}, imgPath: {ok}})
 			_, err := c.Generate(context.Background(), provider.Request{Prompt: "p"})
-			if n := count(submitPath); n != tc.calls {
-				t.Errorf("%d requests reached the submit endpoint, want %d", n, tc.calls)
+			if n := count(submitPath); n != 1 {
+				t.Errorf("%d requests reached the submit endpoint, want 1", n)
 			}
 			if err == nil {
 				t.Fatal("Generate succeeded, want the status error")
@@ -149,23 +157,20 @@ func TestRetryPaidStatus(t *testing.T) {
 			if n := strings.Count(err.Error(), httpx.PaidHint); n != tc.hints {
 				t.Errorf("the hint appears %d times in %q, want %d", n, err, tc.hints)
 			}
+			if !strings.HasSuffix(err.Error(), tc.end) {
+				t.Errorf("err %q, want it to end with %q", err, tc.end)
+			}
 		})
 	}
 }
 
-// A 429 is still retried, because the provider refused it without billing it.
-// The free poll and download are retried too, and neither sends the submit again.
+// The free poll and download are retried, and neither sends the submit again.
 func TestRetrySafeRequests(t *testing.T) {
 	tests := []struct {
 		name   string
 		script map[string][]step
 		want   map[string]int // requests per path
 	}{
-		{
-			"submit 429",
-			map[string][]step{submitPath: {code(http.StatusTooManyRequests), ok}, pollPath: {ok}, imgPath: {ok}},
-			map[string]int{submitPath: 2, pollPath: 1, imgPath: 1},
-		},
 		{
 			"poll 503",
 			map[string][]step{submitPath: {ok}, pollPath: {code(http.StatusServiceUnavailable), ok}, imgPath: {ok}},
